@@ -1,26 +1,119 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Palette principale */
+  --color-bg:           #F5F5F7;
+  --color-surface:      #FFFFFF;
+  --color-surface-2:    #F5F5F7;
+  --color-border:       rgba(0, 0, 0, 0.06);
+
+  --color-accent:        #2563EB;
+  --color-accent-light:  #EFF6FF;
+
+  --color-red:           #FF3B30;
+  --color-red-bg:        #FFF1F0;
+  --color-orange:        #FF9500;
+  --color-orange-bg:     #FFF5E6;
+  --color-green:         #34C759;
+  --color-green-bg:      #F0FDF4;
+
+  --color-text-1: #1D1D1F;
+  --color-text-2: #6E6E73;
+  --color-text-3: #AEAEB2;
+
+  /* Aliases backward-compat */
+  --color-bg-base:       #F5F5F7;
+  --color-bg-surface:    #FFFFFF;
+  --color-danger:        #FF3B30;
+  --color-danger-light:  #FFF1F0;
+  --color-warning:       #FF9500;
+  --color-warning-light: #FFF5E6;
+  --color-success:       #34C759;
+  --color-success-light: #F0FDF4;
+  --color-text-primary:  #1D1D1F;
+  --color-text-secondary:#6E6E73;
+  --color-text-tertiary: #AEAEB2;
+
+  /* Typographie */
+  --font-sans:    var(--font-inter);
+  --font-display: var(--font-dm-serif);
 }
 
-@media (prefers-color-scheme: dark) {
+:root {
+  --sidebar-width:      240px;
+  --topbar-height:      56px;
+  --bottom-nav-height:  60px;
+
+  --border-color: rgba(0, 0, 0, 0.06);
+
+  /* Ombres */
+  --shadow-card:  0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.10);
+  --shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.15);
+  --shadow-sm:    0 1px 4px rgba(0, 0, 0, 0.05);
+  --shadow-md:    0 4px 20px rgba(0, 0, 0, 0.07);
+  --shadow-lg:    0 16px 48px rgba(0, 0, 0, 0.10);
+
+  /* Gradient accent */
+  --gradient-accent: linear-gradient(135deg, #2563EB, #1D4ED8);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* ─── SET table : desktop only, mobile → cards ───────────────────────── */
+.set-table-row,
+.set-table-header { display: none !important; }
+
+@media (min-width: 769px) {
+  .set-table-row   { display: grid !important; }
+  .set-table-header{ display: grid !important; }
+  .set-mobile-card { display: none !important; }
+}
+
+/* ─── Mobile responsive ──────────────────────────────────────────────── */
+@media (max-width: 768px) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --topbar-height: 48px;
+  }
+
+  /* Topbar — éléments cachés sur mobile */
+  .topbar-subtitle,
+  .topbar-sep { display: none !important; }
+  .topbar-nouveau-text { display: none !important; }
+
+  /* Titres de page */
+  .page-title { font-size: 22px !important; }
+
+  /* Dashboard — grille KPI principale */
+  .kpi-grid { grid-template-columns: repeat(2, 1fr) !important; }
+  .kpi-hero { grid-column: 1 / -1 !important; }
+  .hero-card { min-height: unset !important; padding: 16px 18px !important; }
+  .hero-value { font-size: 28px !important; letter-spacing: -0.5px !important; }
+  .kpi-value { font-size: 20px !important; }
+  .dashboard-card { padding: 16px !important; }
+
+  /* Drawer desktop → full-screen sur mobile */
+  .drawer {
+    width: 100% !important;
+    border-radius: 0 !important;
+    top: 0 !important;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Scrollbar discrète */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.22);
 }
