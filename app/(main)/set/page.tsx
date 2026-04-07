@@ -1,7 +1,13 @@
 "use client";
 
 import React, { useEffect, useState, useMemo } from "react";
-import { ChevronDown, ChevronRight, FileDown, Plus, X, CheckCircle, Paperclip } from "lucide-react";
+import {
+  ChevronDown, ChevronRight, FileDown, Plus, X, CheckCircle, Paperclip,
+  Shield, Flame, Zap, ArrowUpDown, Thermometer, UtensilsCrossed, Wind,
+  GraduationCap, FileText, Droplets, AlertTriangle, Wrench, HardHat,
+  Building, Anchor, Leaf,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import Header from "@/components/layout/Header";
 import Badge from "@/components/ui/Badge";
 import UploadDocumentModal from "@/components/ui/UploadDocumentModal";
@@ -41,6 +47,57 @@ const filtres: { key: Filtre; label: string }[] = [
   { key: "alerte", label: "Alerte" },
   { key: "ok", label: "À jour" },
 ];
+
+// ─── Icônes & couleurs par catégorie ─────────────────────────────────────────
+
+const CATEGORIE_ICONS: Record<string, LucideIcon> = {
+  "Commission de Sécurité": Shield,
+  "Sécurité Incendie": Flame,
+  "Installations Electriques": Zap,
+  "Appareils de Levage": ArrowUpDown,
+  "Chaufferie": Thermometer,
+  "Installations Thermiques": Thermometer,
+  "Installations de Gaz": Flame,
+  "Appareils de Cuisson": UtensilsCrossed,
+  "Aération / CTA": Wind,
+  "Formation": GraduationCap,
+  "Documents réglementaires": FileText,
+  "Hygiène de l'eau": Droplets,
+  "Amiante": AlertTriangle,
+  "Maintenance & Administratif": Wrench,
+  "Equipements de Protection": HardHat,
+  "Bâtiment": Building,
+  "Eau / Domaine Maritime": Anchor,
+  "Environnement": Leaf,
+};
+
+const CATEGORIE_COLORS: Record<string, string> = {
+  "Commission de Sécurité": "#FF3B30",
+  "Sécurité Incendie": "#FF3B30",
+  "Amiante": "#FF3B30",
+  "Installations Electriques": "#FF9500",
+  "Appareils de Levage": "#FF9500",
+  "Chaufferie": "#FFCC00",
+  "Installations Thermiques": "#FFCC00",
+  "Installations de Gaz": "#FFCC00",
+  "Appareils de Cuisson": "#FFCC00",
+  "Hygiène de l'eau": "#007AFF",
+  "Eau / Domaine Maritime": "#007AFF",
+  "Aération / CTA": "#007AFF",
+  "Environnement": "#34C759",
+  "Bâtiment": "#34C759",
+  "Documents réglementaires": "#8E8E93",
+  "Maintenance & Administratif": "#8E8E93",
+  "Formation": "#8E8E93",
+};
+
+function getCategorieIcon(nom: string): LucideIcon {
+  return CATEGORIE_ICONS[nom] ?? FileText;
+}
+
+function getCategorieColor(nom: string): string {
+  return CATEGORIE_COLORS[nom] ?? "#8E8E93";
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -348,6 +405,8 @@ function CategorieAccordeon({
 
   const retard = categorie.controles.filter((c) => c.statut === "retard").length;
   const alerte = categorie.controles.filter((c) => c.statut === "alerte").length;
+  const Icon = getCategorieIcon(categorie.nom);
+  const color = getCategorieColor(categorie.nom);
 
   return (
     <div style={{ backgroundColor: "#FFFFFF", borderRadius: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.06)", border: "1px solid rgba(0,0,0,0.04)", overflow: "hidden" }}>
@@ -358,6 +417,9 @@ function CategorieAccordeon({
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {open ? <ChevronDown size={16} color="#AEAEB2" /> : <ChevronRight size={16} color="#AEAEB2" />}
+          <span style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: `${color}18`, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Icon size={15} color={color} strokeWidth={2} />
+          </span>
           <span style={{ fontSize: 14, fontWeight: 600, color: "#1D1D1F" }}>{categorie.nom}</span>
           <span style={{ fontSize: 12, color: "#AEAEB2" }}>({categorie.controles.length})</span>
         </div>
