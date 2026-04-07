@@ -28,6 +28,7 @@ import UploadDocumentModal from "@/components/ui/UploadDocumentModal";
 import {
   fetchEquipements,
   fetchEquipementInterventions,
+  fetchNCByEquipement,
   createEquipement,
   updateEquipement,
   updateEquipementStatut,
@@ -147,6 +148,7 @@ function DetailDrawer({
   const router = useRouter();
   const [interventions, setInterventions] = useState<Intervention[]>([]);
   const [loadingInt, setLoadingInt] = useState(true);
+  const [ncs, setNcs] = useState<{ id: string; description: string; gravite: "majeure" | "mineure"; statut: "ouverte" | "levee"; date_cible: string | null; controle_nom: string | null }[]>([]);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
@@ -158,7 +160,8 @@ function DetailDrawer({
       .then(setInterventions)
       .catch(() => {})
       .finally(() => setLoadingInt(false));
-  }, [eq.nom]);
+    fetchNCByEquipement(eq.id).then(setNcs).catch(() => {});
+  }, [eq.id]);
 
   async function handleStatut(s: EquipementStatut) {
     if (s === eq.statut) return;
@@ -316,6 +319,37 @@ function DetailDrawer({
                   <Badge variant={int.statut === "terminee" ? "success" : "warning"}>
                     {int.statut === "terminee" ? "Terminée" : "En cours"}
                   </Badge>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Non-conformités liées */}
+        <div style={{ padding: "20px 24px", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+            <p style={{ fontSize: 12, fontWeight: 600, color: "#1D1D1F", textTransform: "uppercase", letterSpacing: "0.6px", margin: 0 }}>
+              Non-conformités
+            </p>
+            {ncs.length > 0 && (
+              <span style={{ fontSize: 11, fontWeight: 700, color: ncs.some(n => n.gravite === "majeure" && n.statut === "ouverte") ? "#FF3B30" : "#6E6E73", backgroundColor: ncs.some(n => n.gravite === "majeure" && n.statut === "ouverte") ? "#FF3B3012" : "#F5F5F7", padding: "2px 8px", borderRadius: 10 }}>
+                {ncs.length} NC · {ncs.filter(n => n.statut === "ouverte").length} ouverte{ncs.filter(n => n.statut === "ouverte").length !== 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
+          {ncs.length === 0 ? (
+            <p style={{ fontSize: 13, color: "#AEAEB2", margin: 0 }}>Aucune NC liée à cet équipement</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 0, border: "1px solid rgba(0,0,0,0.06)", borderRadius: 10, overflow: "hidden" }}>
+              {ncs.map((nc, i) => (
+                <div key={nc.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 14px", borderTop: i > 0 ? "1px solid rgba(0,0,0,0.05)" : "none", backgroundColor: "#FFFFFF" }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 8, backgroundColor: nc.gravite === "majeure" ? "#FF3B3015" : "#FF950015", color: nc.gravite === "majeure" ? "#FF3B30" : "#FF9500", flexShrink: 0 }}>
+                    {nc.gravite === "majeure" ? "MAJ" : "MIN"}
+                  </span>
+                  <span style={{ flex: 1, fontSize: 13, color: "#1D1D1F", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nc.description}</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 8, backgroundColor: nc.statut === "ouverte" ? "#FF3B3015" : "#34C75915", color: nc.statut === "ouverte" ? "#FF3B30" : "#34C759", flexShrink: 0 }}>
+                    {nc.statut === "ouverte" ? "Ouverte" : "Levée"}
+                  </span>
                 </div>
               ))}
             </div>

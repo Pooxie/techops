@@ -1001,6 +1001,7 @@ export type NCRecord = {
   statut: "ouverte" | "levee";
   set_controle_id: string | null;
   controle_nom: string | null;
+  equipement_id: string | null;
   source_obs_no: string | null;
   solution_text: string | null;
   action_comment_text: string | null;
@@ -1032,7 +1033,7 @@ export async function fetchNonConformites(): Promise<NCRecord[]> {
   const { data, error } = await supabase
     .from("non_conformites")
     .select(
-      "id, description, gravite, statut, set_controle_id, source_obs_no, solution_text, action_comment_text, action_owner_name, cost_expl, cost_iae, completed_date, is_conforme, is_validated, date_cible, levee_le, created_at, updated_at, controle:set_controles(nom)"
+      "id, description, gravite, statut, set_controle_id, equipement_id, source_obs_no, solution_text, action_comment_text, action_owner_name, cost_expl, cost_iae, completed_date, is_conforme, is_validated, date_cible, levee_le, created_at, updated_at, controle:set_controles(nom)"
     )
     .order("created_at", { ascending: false });
 
@@ -1046,6 +1047,7 @@ export async function fetchNonConformites(): Promise<NCRecord[]> {
     statut: row.statut as "ouverte" | "levee",
     set_controle_id: row.set_controle_id,
     controle_nom: (row.controle as unknown as { nom: string } | null)?.nom ?? null,
+    equipement_id: row.equipement_id ?? null,
     source_obs_no: row.source_obs_no ?? null,
     solution_text: row.solution_text ?? null,
     action_comment_text: row.action_comment_text ?? null,
@@ -1122,9 +1124,13 @@ export async function createNC(payload: {
   description: string;
   gravite: "majeure" | "mineure";
   set_controle_id?: string;
+  equipement_id?: string;
   date_cible?: string;
   action_owner_name?: string;
   solution_text?: string;
+  action_comment_text?: string;
+  cost_expl?: number | null;
+  cost_iae?: number | null;
 }): Promise<void> {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -1142,9 +1148,13 @@ export async function createNC(payload: {
     gravite: payload.gravite,
     statut: "ouverte",
     set_controle_id: payload.set_controle_id || null,
+    equipement_id: payload.equipement_id || null,
     date_cible: payload.date_cible || null,
     action_owner_name: payload.action_owner_name || null,
     solution_text: payload.solution_text || null,
+    action_comment_text: payload.action_comment_text || null,
+    cost_expl: payload.cost_expl ?? null,
+    cost_iae: payload.cost_iae ?? null,
   };
   if (userData.hotel_id) insertPayload.hotel_id = userData.hotel_id;
 
@@ -1162,6 +1172,101 @@ export async function updateNCStatut(id: string, statut: "levee"): Promise<void>
     .update({ statut, levee_le: new Date().toISOString() })
     .eq("id", id);
   if (error) throw new Error(error.message);
+}
+
+export async function updateNC(id: string, payload: {
+  description: string;
+  gravite: "majeure" | "mineure";
+  date_cible: string | null;
+  action_owner_name: string | null;
+  solution_text: string | null;
+  action_comment_text: string | null;
+  cost_expl: number | null;
+  cost_iae: number | null;
+}): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("non_conformites")
+    .update({ ...payload, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteNC(id: string): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.from("non_conformites").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+export async function fetchNCByEquipement(equipementId: string): Promise<Pick<NCRecord, "id" | "description" | "gravite" | "statut" | "date_cible" | "controle_nom">[]> {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("non_conformites")
+    .select("id, description, gravite, statut, date_cible, controle:set_controles(nom)")
+    .eq("equipement_id", equipementId)
+    .order("created_at", { ascending: false });
+
+  if (!data) return [];
+  return data.map((row) => ({
+    id: row.id,
+    description: row.description,
+    gravite: row.gravite as "majeure" | "mineure",
+    statut: row.statut as "ouverte" | "levee",
+    date_cible: row.date_cible ?? null,
+    controle_nom: (row.controle as unknown as { nom: string } | null)?.nom ?? null,
+  }));
+}
+
+export type NCEvolutionItem = {
+  month: string;   // "YYYY-MM"
+  label: string;   // "Janv.", "Févr.", …
+  total: number;
+  majeures: number;
+  levees: number;
+};
+
+export async function fetchNCEvolution(): Promise<NCEvolutionItem[]> {
+  const supabase = createClient();
+  const since = new Date();
+  since.setMonth(since.getMonth() - 5);
+  since.setDate(1);
+  since.setHours(0, 0, 0, 0);
+
+  const { data } = await supabase
+    .from("non_conformites")
+    .select("created_at, gravite, statut")
+    .gte("created_at", since.toISOString())
+    .order("created_at", { ascending: true });
+
+  if (!data) return [];
+
+  const map = new Map<string, { total: number; majeures: number; levees: number }>();
+
+  // Pre-fill last 6 months so months with 0 NC still appear
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() - i);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    map.set(key, { total: 0, majeures: 0, levees: 0 });
+  }
+
+  for (const row of data) {
+    const d = new Date(row.created_at);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    if (!map.has(key)) continue;
+    const entry = map.get(key)!;
+    entry.total += 1;
+    if (row.gravite === "majeure") entry.majeures += 1;
+    if (row.statut === "levee") entry.levees += 1;
+  }
+
+  const MONTHS_FR = ["Janv.", "Févr.", "Mars", "Avr.", "Mai", "Juin", "Juil.", "Août", "Sept.", "Oct.", "Nov.", "Déc."];
+  return Array.from(map.entries()).map(([month, counts]) => ({
+    month,
+    label: MONTHS_FR[parseInt(month.split("-")[1], 10) - 1],
+    ...counts,
+  }));
 }
 
 // ─── Planning ─────────────────────────────────────────────────────────────────
