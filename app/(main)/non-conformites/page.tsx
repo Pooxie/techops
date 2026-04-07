@@ -150,13 +150,23 @@ function GroupeControle({
                 {nc.description}
               </span>
 
-              {/* Badges + date */}
+              {/* Badges + date + coûts */}
               <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
                 <GraviteBadge gravite={nc.gravite} />
                 <StatutBadge statut={nc.statut} />
                 {nc.date_cible && (
                   <span style={{ fontSize: 11, color: nc.statut === "ouverte" ? "#FF9500" : "#AEAEB2", whiteSpace: "nowrap" }}>
                     {fmtDate(nc.date_cible)}
+                  </span>
+                )}
+                {fmtCost(nc.cost_expl) && (
+                  <span style={{ fontSize: 10, fontWeight: 600, color: "#6E6E73", backgroundColor: "#F5F5F7", padding: "1px 6px", borderRadius: 8, whiteSpace: "nowrap" }}>
+                    Expl. {fmtCost(nc.cost_expl)}
+                  </span>
+                )}
+                {fmtCost(nc.cost_iae) && (
+                  <span style={{ fontSize: 10, fontWeight: 600, color: "#6E6E73", backgroundColor: "#F5F5F7", padding: "1px 6px", borderRadius: 8, whiteSpace: "nowrap" }}>
+                    IAE {fmtCost(nc.cost_iae)}
                   </span>
                 )}
               </div>
@@ -432,8 +442,8 @@ export default function NonConformitesPage() {
   // ── Filtrage ──
   const filtered = useMemo(() => ncs.filter(nc => {
     if (filter === "ouvertes") return nc.statut === "ouverte";
-    if (filter === "majeures") return nc.gravite === "majeure" && nc.statut === "ouverte";
-    if (filter === "mineures") return nc.gravite === "mineure" && nc.statut === "ouverte";
+    if (filter === "majeures") return nc.gravite === "majeure";
+    if (filter === "mineures") return nc.gravite === "mineure";
     if (filter === "levees")   return nc.statut === "levee";
     return true;
   }), [ncs, filter]);
@@ -441,8 +451,8 @@ export default function NonConformitesPage() {
   const counts: Record<Filter, number> = useMemo(() => ({
     toutes:   ncs.length,
     ouvertes: ncs.filter(nc => nc.statut === "ouverte").length,
-    majeures: ncs.filter(nc => nc.gravite === "majeure" && nc.statut === "ouverte").length,
-    mineures: ncs.filter(nc => nc.gravite === "mineure" && nc.statut === "ouverte").length,
+    majeures: ncs.filter(nc => nc.gravite === "majeure").length,
+    mineures: ncs.filter(nc => nc.gravite === "mineure").length,
     levees:   ncs.filter(nc => nc.statut === "levee").length,
   }), [ncs]);
 

@@ -3,12 +3,14 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   createTache,
+  deleteTache,
   fetchPlanningInterventions,
   fetchPlanningPrestataires,
   fetchPlanningRondes,
   fetchTaches,
   fetchUsers,
   toggleTacheStatut,
+  updateTache,
   type PlanningInterventionEvent,
   type PlanningRondeEvent,
   type PrestataireEvent,
@@ -93,9 +95,11 @@ const inputSt: React.CSSProperties = {
 function EventChip({
   event,
   onToggle,
+  onSelectTache,
 }: {
   event: GridEvent;
   onToggle?: (id: string, s: "a_faire" | "fait") => void;
+  onSelectTache?: (t: TacheRecord) => void;
 }) {
   const color = eventColor(event);
   const label = eventLabel(event);
@@ -105,11 +109,10 @@ function EventChip({
   return (
     <div
       onClick={
-        isTache && onToggle
-          ? () => {
-              const t = event.data as TacheRecord;
-              onToggle(t.id, t.statut === "fait" ? "a_faire" : "fait");
-            }
+        isTache && onSelectTache
+          ? () => onSelectTache(event.data as TacheRecord)
+          : isTache && onToggle
+          ? () => { const t = event.data as TacheRecord; onToggle(t.id, t.statut === "fait" ? "a_faire" : "fait"); }
           : undefined
       }
       style={{
@@ -148,11 +151,13 @@ function DesktopGrid({
   weekDays,
   eventsForDay,
   onToggle,
+  onSelectTache,
   today,
 }: {
   weekDays: Date[];
   eventsForDay: (d: Date) => GridEvent[];
   onToggle: (id: string, s: "a_faire" | "fait") => void;
+  onSelectTache: (t: TacheRecord) => void;
   today: Date;
 }) {
   return (
@@ -216,7 +221,7 @@ function DesktopGrid({
                   </div>
                 ) : (
                   events.map((e, j) => (
-                    <EventChip key={j} event={e} onToggle={onToggle} />
+                    <EventChip key={j} event={e} onToggle={onToggle} onSelectTache={onSelectTache} />
                   ))
                 )}
               </div>
@@ -234,11 +239,13 @@ function MobileList({
   weekDays,
   eventsForDay,
   onToggle,
+  onSelectTache,
   today,
 }: {
   weekDays: Date[];
   eventsForDay: (d: Date) => GridEvent[];
   onToggle: (id: string, s: "a_faire" | "fait") => void;
+  onSelectTache: (t: TacheRecord) => void;
   today: Date;
 }) {
   return (
@@ -292,10 +299,7 @@ function MobileList({
                       key={j}
                       onClick={
                         isTache
-                          ? () => {
-                              const t = e.data as TacheRecord;
-                              onToggle(t.id, t.statut === "fait" ? "a_faire" : "fait");
-                            }
+                          ? () => onSelectTache(e.data as TacheRecord)
                           : undefined
                       }
                       style={{
@@ -361,6 +365,132 @@ function KpiCard({ label, value, color, icon }: { label: string; value: number; 
       <div style={{ fontSize: 26, fontWeight: 700, color, lineHeight: 1 }}>{value}</div>
       <div style={{ fontSize: 12, color: "#8E8E93", marginTop: 2 }}>{label}</div>
     </div>
+  );
+}
+
+// ─── Tâche drawer (détail / édition / suppression) ───────────────────────────
+
+function TacheDrawer({
+  tache,
+  onClose,
+  onUpdated,
+  onDeleted,
+}: {
+  tache: TacheRecord;
+  onClose: () => void;
+  onUpdated: () => void;
+  onDeleted: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [titre, setTitre] = useState(tache.titre);
+  const [date, setDate] = useState(tache.date);
+  const [heure, setHeure] = useState(tache.heure ?? "");
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSave() {
+    if (!titre.trim()) { setError("Le titre est obligatoire"); return; }
+    setSaving(true); setError("");
+    try {
+      await updateTache(tache.id, { titre: titre.trim(), date, heure: heure || null });
+      onUpdated();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erreur");
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirm("Supprimer cette tâche ?")) return;
+    setDeleting(true);
+    try {
+      await deleteTache(tache.id);
+      onDeleted();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erreur");
+      setDeleting(false);
+    }
+  }
+
+  const fmtD = (iso: string) => new Date(iso).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.40)", backdropFilter: "blur(4px)", zIndex: 200 }} />
+      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, backgroundColor: "#FFFFFF", borderRadius: "20px 20px 0 0", padding: "20px 20px 48px", zIndex: 201, maxHeight: "85vh", overflowY: "auto" }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: "#C7C7CC", margin: "0 auto 16px" }} />
+
+        {/* En-tête */}
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
+          <div>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#8E8E93", backgroundColor: "#F5F5F7", padding: "2px 8px", borderRadius: 8, textTransform: "uppercase", letterSpacing: 0.5 }}>Tâche</span>
+            {!editing && <p style={{ fontSize: 18, fontWeight: 700, color: "#1D1D1F", margin: "8px 0 4px", lineHeight: 1.3 }}>{tache.titre}</p>}
+            {!editing && <p style={{ fontSize: 13, color: "#8E8E93", margin: 0 }}>{fmtD(tache.date)}{tache.heure ? ` · ${tache.heure}` : ""}</p>}
+          </div>
+          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+            <button
+              onClick={() => setEditing(v => !v)}
+              style={{ height: 30, padding: "0 12px", borderRadius: 8, border: "1px solid rgba(0,0,0,0.10)", backgroundColor: editing ? "#EFF6FF" : "#F5F5F7", fontSize: 12, fontWeight: 600, color: editing ? "#2563EB" : "#6E6E73", cursor: "pointer" }}
+            >
+              {editing ? "Annuler" : "Modifier"}
+            </button>
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              style={{ height: 30, padding: "0 12px", borderRadius: 8, border: "1px solid rgba(255,59,48,0.2)", backgroundColor: "#FFF1F0", fontSize: 12, fontWeight: 600, color: "#FF3B30", cursor: deleting ? "not-allowed" : "pointer" }}
+            >
+              {deleting ? "…" : "Supprimer"}
+            </button>
+          </div>
+        </div>
+
+        {error && <p style={{ fontSize: 13, color: "#FF3B30", backgroundColor: "#FFF1F0", padding: "10px 12px", borderRadius: 10, margin: "0 0 16px" }}>{error}</p>}
+
+        {/* Statut */}
+        {!editing && (
+          <div style={{ padding: "12px 16px", backgroundColor: tache.statut === "fait" ? "#F0FDF4" : "#F5F5F7", borderRadius: 12, marginBottom: 16, display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 20, height: 20, borderRadius: 10, border: `2px solid ${tache.statut === "fait" ? "#34C759" : "#C7C7CC"}`, backgroundColor: tache.statut === "fait" ? "#34C759" : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {tache.statut === "fait" && <span style={{ color: "#FFFFFF", fontSize: 11, fontWeight: 700 }}>✓</span>}
+            </div>
+            <span style={{ fontSize: 14, fontWeight: 600, color: tache.statut === "fait" ? "#34C759" : "#6E6E73" }}>
+              {tache.statut === "fait" ? "Tâche accomplie" : "À faire"}
+            </span>
+          </div>
+        )}
+
+        {/* Formulaire édition */}
+        {editing && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
+            <div>
+              <label style={labelSt}>TITRE *</label>
+              <input value={titre} onChange={e => setTitre(e.target.value)} style={inputSt} />
+            </div>
+            <div style={{ display: "flex", gap: 12 }}>
+              <div style={{ flex: 2 }}>
+                <label style={labelSt}>DATE *</label>
+                <input type="date" value={date} onChange={e => setDate(e.target.value)} style={inputSt} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={labelSt}>HEURE</label>
+                <input type="time" value={heure} onChange={e => setHeure(e.target.value)} style={inputSt} />
+              </div>
+            </div>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              style={{ width: "100%", padding: "13px", backgroundColor: saving ? "#C7C7CC" : "#2563EB", color: "#FFFFFF", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer" }}
+            >
+              {saving ? "Enregistrement…" : "Enregistrer"}
+            </button>
+          </div>
+        )}
+
+        <button onClick={onClose} style={{ width: "100%", padding: "12px", backgroundColor: "transparent", color: "#8E8E93", border: "1px solid rgba(0,0,0,0.10)", borderRadius: 12, fontSize: 14, cursor: "pointer" }}>
+          Fermer
+        </button>
+      </div>
+    </>
   );
 }
 
@@ -474,6 +604,7 @@ export default function PlanningPage() {
   const [loading, setLoading] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [selectedTache, setSelectedTache] = useState<TacheRecord | null>(null);
 
   // Mobile detection
   useEffect(() => {
@@ -581,9 +712,9 @@ export default function PlanningPage() {
           Chargement…
         </div>
       ) : isMobile ? (
-        <MobileList weekDays={weekDays} eventsForDay={eventsForDay} onToggle={handleToggle} today={today} />
+        <MobileList weekDays={weekDays} eventsForDay={eventsForDay} onToggle={handleToggle} onSelectTache={setSelectedTache} today={today} />
       ) : (
-        <DesktopGrid weekDays={weekDays} eventsForDay={eventsForDay} onToggle={handleToggle} today={today} />
+        <DesktopGrid weekDays={weekDays} eventsForDay={eventsForDay} onToggle={handleToggle} onSelectTache={setSelectedTache} today={today} />
       )}
 
       {/* Legend */}
@@ -618,6 +749,16 @@ export default function PlanningPage() {
       >
         +
       </button>
+
+      {/* Tâche drawer */}
+      {selectedTache && (
+        <TacheDrawer
+          tache={selectedTache}
+          onClose={() => setSelectedTache(null)}
+          onUpdated={() => { setSelectedTache(null); loadData(); }}
+          onDeleted={() => { setSelectedTache(null); loadData(); }}
+        />
+      )}
 
       {/* Create task sheet */}
       {showCreate && (

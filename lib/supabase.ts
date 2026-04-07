@@ -1299,9 +1299,21 @@ export async function createTache(payload: {
 
 export async function toggleTacheStatut(id: string, statut: "a_faire" | "fait"): Promise<void> {
   const supabase = createClient();
+  const { error } = await supabase.from("taches").update({ statut }).eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteTache(id: string): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.from("taches").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function updateTache(id: string, payload: { titre: string; date: string; heure?: string | null }): Promise<void> {
+  const supabase = createClient();
   const { error } = await supabase
     .from("taches")
-    .update({ statut })
+    .update({ titre: payload.titre, date: payload.date, heure: payload.heure || null })
     .eq("id", id);
   if (error) throw error;
 }
