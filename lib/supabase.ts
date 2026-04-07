@@ -11,6 +11,7 @@ export function createClient() {
 export type DashboardKPIs = {
   scoreConformite: number;
   equipementsCritiques: number;
+  ncOuvertes: number;
   nonConformitesMajeures: number;
   prestatairesCetteSemaine: number;
 };
@@ -334,6 +335,7 @@ export async function fetchDashboardKPIs(): Promise<DashboardKPIs> {
     { count: totalControles },
     { count: controlesOk },
     { count: controlesRetard },
+    { count: ncOuvertes },
     { count: ncMajeures },
     { count: prestatairesSemaine },
   ] = await Promise.all([
@@ -354,12 +356,18 @@ export async function fetchDashboardKPIs(): Promise<DashboardKPIs> {
       .select("*", { count: "exact", head: true })
       .eq("statut", "retard"),
 
+    // NC ouvertes (toutes)
+    supabase
+      .from("non_conformites")
+      .select("*", { count: "exact", head: true })
+      .eq("statut", "ouverte"),
+
     // Non-conformités majeures ouvertes
     supabase
       .from("non_conformites")
       .select("*", { count: "exact", head: true })
       .eq("gravite", "majeure")
-      .neq("statut", "levee"),
+      .eq("statut", "ouverte"),
 
     // Prestataires cette semaine (date_prochaine entre aujourd'hui et +7j)
     supabase
@@ -376,6 +384,7 @@ export async function fetchDashboardKPIs(): Promise<DashboardKPIs> {
   return {
     scoreConformite,
     equipementsCritiques: controlesRetard ?? 0,
+    ncOuvertes: ncOuvertes ?? 0,
     nonConformitesMajeures: ncMajeures ?? 0,
     prestatairesCetteSemaine: prestatairesSemaine ?? 0,
   };
@@ -977,22 +986,29 @@ export type NCRecord = {
   id: string;
   description: string;
   gravite: "majeure" | "mineure";
-  statut: "ouverte" | "en_cours" | "levee";
+  statut: "ouverte" | "levee";
   set_controle_id: string | null;
   controle_nom: string | null;
+  source_obs_no: string | null;
+  solution_text: string | null;
+  action_comment_text: string | null;
+  action_owner_name: string | null;
+  cost_expl: number | null;
+  cost_iae: number | null;
+  completed_date: string | null;
+  is_conforme: boolean | null;
+  is_validated: boolean | null;
   date_cible: string | null;
-  assigne_a: string | null;
-  assigne_prenom: string | null;
-  assigne_nom: string | null;
-  commentaire_resolution: string | null;
   levee_le: string | null;
   created_at: string;
+  updated_at: string | null;
 };
 
 export type NCKPIs = {
   ouvertesTotal: number;
   majeuresOuvertes: number;
-  leevesCeMois: number;
+  leveeTotal: number;
+  coutTotal: number;
 };
 
 export type SetControleItem = { id: string; nom: string };
@@ -1002,55 +1018,78 @@ export async function fetchNonConformites(): Promise<NCRecord[]> {
   const { data, error } = await supabase
     .from("non_conformites")
     .select(
-      "id, description, gravite, statut, set_controle_id, controle:set_controles(nom), date_cible, assignee_a, assigne:users(prenom, nom), created_at"
+      "id, description, gravite, statut, set_controle_id, source_obs_no, solution_text, action_comment_text, action_owner_name, cost_expl, cost_iae, completed_date, is_conforme, is_validated, date_cible, levee_le, created_at, updated_at, controle:set_controles(nom)"
     )
     .order("created_at", { ascending: false });
 
   if (error) console.error("fetchNonConformites error:", JSON.stringify(error, null, 2));
+  console.log("[fetchNonConformites] rows:", data?.length, "| sample statuts:", data?.slice(0, 3).map(r => r.statut));
   if (!data) return [];
   return data.map((row) => ({
     id: row.id,
     description: row.description,
     gravite: row.gravite as "majeure" | "mineure",
-    statut: row.statut as "ouverte" | "en_cours" | "levee",
+    statut: row.statut as "ouverte" | "levee",
     set_controle_id: row.set_controle_id,
     controle_nom: (row.controle as unknown as { nom: string } | null)?.nom ?? null,
-    date_cible: row.date_cible,
-    assigne_a: row.assignee_a,
-    assigne_prenom: (row.assigne as unknown as { prenom: string; nom: string } | null)?.prenom ?? null,
-    assigne_nom: (row.assigne as unknown as { prenom: string; nom: string } | null)?.nom ?? null,
-    commentaire_resolution: null,
-    levee_le: null,
+    source_obs_no: row.source_obs_no ?? null,
+    solution_text: row.solution_text ?? null,
+    action_comment_text: row.action_comment_text ?? null,
+    action_owner_name: row.action_owner_name ?? null,
+    cost_expl: row.cost_expl ?? null,
+    cost_iae: row.cost_iae ?? null,
+    completed_date: row.completed_date ?? null,
+    is_conforme: row.is_conforme ?? null,
+    is_validated: row.is_validated ?? null,
+    date_cible: row.date_cible ?? null,
+    levee_le: row.levee_le ?? null,
     created_at: row.created_at,
+    updated_at: row.updated_at ?? null,
   }));
 }
 
 export async function fetchNCKPIs(): Promise<NCKPIs> {
   const supabase = createClient();
-  const now = new Date();
-  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
-  const [{ count: ouvertes }, { count: majeures }, { count: levees }] = await Promise.all([
+  const [
+    { count: ouvertes, error: e1 },
+    { count: majeures, error: e2 },
+    { count: levees, error: e3 },
+    { data: coutData, error: e4 },
+  ] = await Promise.all([
     supabase
       .from("non_conformites")
       .select("*", { count: "exact", head: true })
-      .neq("statut", "levee"),
+      .eq("statut", "ouverte"),
     supabase
       .from("non_conformites")
       .select("*", { count: "exact", head: true })
       .eq("gravite", "majeure")
-      .neq("statut", "levee"),
+      .eq("statut", "ouverte"),
     supabase
       .from("non_conformites")
       .select("*", { count: "exact", head: true })
-      .eq("statut", "levee")
-      .gte("created_at", firstOfMonth),
+      .eq("statut", "levee"),
+    supabase
+      .from("non_conformites")
+      .select("cost_expl, cost_iae"),
   ]);
+
+  if (e1) console.error("[NCKPIs] ouvertes:", e1.message);
+  if (e2) console.error("[NCKPIs] majeures:", e2.message);
+  if (e3) console.error("[NCKPIs] levees:", e3.message);
+  if (e4) console.error("[NCKPIs] cout:", e4.message);
+
+  const coutTotal = (coutData ?? []).reduce(
+    (sum, row) => sum + (row.cost_expl ?? 0) + (row.cost_iae ?? 0),
+    0
+  );
 
   return {
     ouvertesTotal: ouvertes ?? 0,
     majeuresOuvertes: majeures ?? 0,
-    leevesCeMois: levees ?? 0,
+    leveeTotal: levees ?? 0,
+    coutTotal,
   };
 }
 
@@ -1070,7 +1109,8 @@ export async function createNC(payload: {
   gravite: "majeure" | "mineure";
   set_controle_id?: string;
   date_cible?: string;
-  assigne_a?: string;
+  action_owner_name?: string;
+  solution_text?: string;
 }): Promise<void> {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -1089,7 +1129,8 @@ export async function createNC(payload: {
     statut: "ouverte",
     set_controle_id: payload.set_controle_id || null,
     date_cible: payload.date_cible || null,
-    assignee_a: payload.assigne_a || null,
+    action_owner_name: payload.action_owner_name || null,
+    solution_text: payload.solution_text || null,
   };
   if (userData.hotel_id) insertPayload.hotel_id = userData.hotel_id;
 
@@ -1100,15 +1141,11 @@ export async function createNC(payload: {
   }
 }
 
-export async function updateNCStatut(
-  id: string,
-  statut: "en_cours" | "levee",
-  commentaire?: string
-): Promise<void> {
+export async function updateNCStatut(id: string, statut: "levee"): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase
     .from("non_conformites")
-    .update({ statut })
+    .update({ statut, levee_le: new Date().toISOString() })
     .eq("id", id);
   if (error) throw new Error(error.message);
 }

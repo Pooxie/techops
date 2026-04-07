@@ -1,17 +1,16 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
+import { X } from "lucide-react";
 import {
   createNC,
   fetchNCKPIs,
   fetchNonConformites,
   fetchSetControlesList,
-  fetchUsers,
   updateNCStatut,
   type NCKPIs,
   type NCRecord,
   type SetControleItem,
-  type UserRecord,
 } from "@/lib/supabase";
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -21,8 +20,9 @@ function fmtDate(iso: string | null): string {
   return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
 }
 
-function initiales(prenom: string | null, nom: string | null): string {
-  return `${(prenom?.[0] ?? "").toUpperCase()}${(nom?.[0] ?? "").toUpperCase()}`;
+function fmtCost(v: number | null): string {
+  if (!v || v === 0) return "—";
+  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(v);
 }
 
 // ─── Style constants ───────────────────────────────────────────────────────────
@@ -36,25 +36,40 @@ const inputSt: React.CSSProperties = {
   backgroundColor: "#F5F5F7",
   outline: "none",
   boxSizing: "border-box",
+  fontFamily: "var(--font-inter, system-ui, sans-serif)",
+  color: "#1D1D1F",
 };
 
 const labelSt: React.CSSProperties = {
   display: "block",
-  fontSize: 13,
+  fontSize: 12,
   fontWeight: 600,
   color: "#6E6E73",
+  letterSpacing: "0.3px",
   marginBottom: 6,
 };
 
-// ─── Statut badge ──────────────────────────────────────────────────────────────
+// ─── Badges ────────────────────────────────────────────────────────────────────
 
 function StatutBadge({ statut }: { statut: NCRecord["statut"] }) {
-  const cfg = {
-    ouverte:  { bg: "#FF3B3018", color: "#FF3B30", label: "Ouverte" },
-    en_cours: { bg: "#FF950018", color: "#FF9500", label: "En cours" },
-    levee:    { bg: "#34C75918", color: "#34C759", label: "Levée" },
-  }[statut];
+  const cfg = statut === "levee"
+    ? { bg: "#34C75918", color: "#34C759", label: "Levée" }
+    : { bg: "#FF3B3018", color: "#FF3B30", label: "Ouverte" };
+  return (
+    <span style={{
+      backgroundColor: cfg.bg, color: cfg.color,
+      fontSize: 11, fontWeight: 700, padding: "2px 8px",
+      borderRadius: 16, textTransform: "uppercase" as const, letterSpacing: 0.3,
+    }}>
+      {cfg.label}
+    </span>
+  );
+}
 
+function GraviteBadge({ gravite }: { gravite: NCRecord["gravite"] }) {
+  const cfg = gravite === "majeure"
+    ? { bg: "#FF3B3018", color: "#FF3B30", label: "Majeure" }
+    : { bg: "#FF950018", color: "#FF9500", label: "Mineure" };
   return (
     <span style={{
       backgroundColor: cfg.bg, color: cfg.color,
@@ -68,14 +83,15 @@ function StatutBadge({ statut }: { statut: NCRecord["statut"] }) {
 
 // ─── KPI card ──────────────────────────────────────────────────────────────────
 
-function KpiCard({ label, value, color, sub }: { label: string; value: number; color: string; sub?: string }) {
+function KpiCard({ label, value, color, sub }: { label: string; value: string; color: string; sub?: string }) {
   return (
     <div style={{
       flex: "1 1 0", backgroundColor: "#FFFFFF", borderRadius: 16,
-      padding: "14px 16px", boxShadow: "0 2px 8px rgba(0,0,0,0.06)", minWidth: 90,
+      padding: "14px 16px", boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+      border: "1px solid rgba(0,0,0,0.05)", minWidth: 80,
     }}>
-      <div style={{ fontSize: 28, fontWeight: 700, color, lineHeight: 1 }}>{value}</div>
-      <div style={{ fontSize: 13, fontWeight: 600, color: "#1D1D1F", marginTop: 4 }}>{label}</div>
+      <div style={{ fontSize: 26, fontWeight: 700, color, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{value}</div>
+      <div style={{ fontSize: 12, fontWeight: 600, color: "#1D1D1F", marginTop: 5, lineHeight: 1.3 }}>{label}</div>
       {sub && <div style={{ fontSize: 11, color: "#8E8E93", marginTop: 2 }}>{sub}</div>}
     </div>
   );
@@ -84,8 +100,8 @@ function KpiCard({ label, value, color, sub }: { label: string; value: number; c
 // ─── NC Card ───────────────────────────────────────────────────────────────────
 
 function NCCard({ nc, onClick }: { nc: NCRecord; onClick: () => void }) {
-  const dotColor = nc.gravite === "majeure" ? "#FF3B30" : "#FF9500";
-  const hasAssignee = nc.assigne_prenom && nc.assigne_nom;
+  const accentColor = nc.gravite === "majeure" ? "#FF3B30" : "#FF9500";
+  const hasCost = nc.cost_expl && nc.cost_expl > 0;
 
   return (
     <div
@@ -95,51 +111,85 @@ function NCCard({ nc, onClick }: { nc: NCRecord; onClick: () => void }) {
         borderRadius: 16,
         padding: "14px 16px",
         boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+        border: "1px solid rgba(0,0,0,0.04)",
         cursor: "pointer",
         display: "flex",
         gap: 12,
         alignItems: "flex-start",
       }}
     >
-      {/* Dot */}
-      <div style={{
-        width: 10, height: 10, borderRadius: 5,
-        backgroundColor: dotColor, flexShrink: 0, marginTop: 5,
-      }} />
+      {/* Barre accent */}
+      <div style={{ width: 3, borderRadius: 99, backgroundColor: accentColor, alignSelf: "stretch", flexShrink: 0, minHeight: 40 }} />
 
-      {/* Content */}
+      {/* Contenu */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 15, fontWeight: 600, color: "#1D1D1F", marginBottom: 3, lineHeight: 1.3 }}>
+        {/* Ligne 1 : numéro obs + badges */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, flexWrap: "wrap" }}>
+          {nc.source_obs_no && (
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#8E8E93", backgroundColor: "#F5F5F7", padding: "1px 7px", borderRadius: 10 }}>
+              #{nc.source_obs_no}
+            </span>
+          )}
+          <GraviteBadge gravite={nc.gravite} />
+          <StatutBadge statut={nc.statut} />
+        </div>
+
+        {/* Description (2 lignes max) */}
+        <div style={{
+          fontSize: 14, fontWeight: 600, color: "#1D1D1F", lineHeight: 1.4, marginBottom: 5,
+          display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const, overflow: "hidden",
+        }}>
           {nc.description}
         </div>
+
+        {/* Contrôle associé */}
         {nc.controle_nom && (
-          <div style={{ fontSize: 12, color: "#8E8E93", marginBottom: 8 }}>
+          <div style={{ fontSize: 12, color: "#8E8E93", marginBottom: 6 }}>
             {nc.controle_nom}
           </div>
         )}
-        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-          <StatutBadge statut={nc.statut} />
+
+        {/* Méta : responsable, date cible, coût */}
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          {nc.action_owner_name && (
+            <span style={{ fontSize: 12, color: "#6E6E73", display: "flex", alignItems: "center", gap: 3 }}>
+              <span style={{ opacity: 0.6 }}>👤</span> {nc.action_owner_name}
+            </span>
+          )}
           {nc.date_cible && (
-            <span style={{ fontSize: 12, color: "#8E8E93" }}>
-              Cible : {fmtDate(nc.date_cible)}
+            <span style={{ fontSize: 12, color: nc.statut === "ouverte" ? "#FF9500" : "#8E8E93" }}>
+              Cible : <strong>{fmtDate(nc.date_cible)}</strong>
+            </span>
+          )}
+          {hasCost && (
+            <span style={{ fontSize: 12, fontWeight: 600, color: "#1D1D1F", backgroundColor: "#F5F5F7", padding: "1px 7px", borderRadius: 10 }}>
+              {fmtCost(nc.cost_expl)}
             </span>
           )}
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* Assignee avatar */}
-      {hasAssignee && (
-        <div style={{
-          width: 32, height: 32, borderRadius: 16,
-          backgroundColor: "#2563EB22",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          flexShrink: 0,
-        }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: "#2563EB" }}>
-            {initiales(nc.assigne_prenom, nc.assigne_nom)}
-          </span>
-        </div>
-      )}
+// ─── Section helper ────────────────────────────────────────────────────────────
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ padding: "16px 20px", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
+      <p style={{ fontSize: 11, fontWeight: 700, color: "#AEAEB2", textTransform: "uppercase", letterSpacing: "0.6px", margin: "0 0 10px" }}>
+        {title}
+      </p>
+      {children}
+    </div>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "7px 0", borderBottom: "1px solid #F5F5F7", gap: 12 }}>
+      <span style={{ fontSize: 13, color: "#8E8E93", flexShrink: 0 }}>{label}</span>
+      <span style={{ fontSize: 13, fontWeight: 600, color: "#1D1D1F", textAlign: "right" }}>{value}</span>
     </div>
   );
 }
@@ -158,11 +208,11 @@ function DetailDrawer({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  async function passer(newStatut: "en_cours" | "levee") {
+  async function marquerLevee() {
     setSaving(true);
     setError("");
     try {
-      await updateNCStatut(nc.id, newStatut);
+      await updateNCStatut(nc.id, "levee");
       onUpdated();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erreur");
@@ -170,106 +220,141 @@ function DetailDrawer({
     }
   }
 
-  const dotColor = nc.gravite === "majeure" ? "#FF3B30" : "#FF9500";
+  const coutTotal = (nc.cost_expl ?? 0) + (nc.cost_iae ?? 0);
 
   return (
     <>
-      <div onClick={onClose} style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)", zIndex: 200 }} />
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.40)", backdropFilter: "blur(4px)", zIndex: 200 }} />
       <div style={{
-        position: "fixed", bottom: 0, left: 0, right: 0,
-        backgroundColor: "#FFFFFF", borderRadius: "24px 24px 0 0",
-        padding: "20px 20px 44px", zIndex: 201,
-        maxHeight: "85vh", overflowY: "auto",
+        position: "fixed", top: 0, right: 0, bottom: 0, width: 480,
+        backgroundColor: "#FFFFFF", zIndex: 201,
+        display: "flex", flexDirection: "column",
+        boxShadow: "-24px 0 64px rgba(0,0,0,0.12)",
+        overflowY: "auto",
       }}>
-        <div style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: "#C7C7CC", margin: "0 auto 20px" }} />
-
-        {/* Header */}
-        <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 20 }}>
-          <div style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: dotColor, flexShrink: 0, marginTop: 5 }} />
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: "#1D1D1F", lineHeight: 1.3, marginBottom: 6 }}>
-              {nc.description}
-            </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        {/* ── En-tête ── */}
+        <div style={{ padding: "20px 20px 16px", borderBottom: "1px solid rgba(0,0,0,0.06)", display: "flex", alignItems: "flex-start", gap: 12, justifyContent: "space-between" }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+              {nc.source_obs_no && (
+                <span style={{ fontSize: 11, fontWeight: 700, color: "#8E8E93", backgroundColor: "#F5F5F7", padding: "2px 8px", borderRadius: 10 }}>
+                  #{nc.source_obs_no}
+                </span>
+              )}
+              <GraviteBadge gravite={nc.gravite} />
               <StatutBadge statut={nc.statut} />
-              <span style={{
-                fontSize: 11, fontWeight: 600,
-                backgroundColor: dotColor + "22", color: dotColor,
-                padding: "2px 8px", borderRadius: 16, textTransform: "uppercase" as const,
-              }}>
-                {nc.gravite}
-              </span>
             </div>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: "#1D1D1F", margin: 0, lineHeight: 1.4 }}>
+              {nc.description}
+            </h2>
+            {nc.controle_nom && (
+              <p style={{ fontSize: 12, color: "#8E8E93", margin: "6px 0 0" }}>{nc.controle_nom}</p>
+            )}
           </div>
+          <button
+            onClick={onClose}
+            style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 8, border: "1px solid rgba(0,0,0,0.08)", backgroundColor: "#F5F5F7", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+          >
+            <X size={15} color="#6E6E73" />
+          </button>
         </div>
 
-        {/* Info rows */}
-        {[
-          { label: "Créée le", value: fmtDate(nc.created_at) },
-          { label: "Contrôle associé", value: nc.controle_nom ?? "—" },
-          { label: "Date cible", value: fmtDate(nc.date_cible) },
-          {
-            label: "Assignée à",
-            value: nc.assigne_prenom
-              ? `${nc.assigne_prenom} ${nc.assigne_nom ?? ""}`.trim()
-              : "—",
-          },
-        ].map(({ label, value }) => (
-          <div key={label} style={{
-            display: "flex", justifyContent: "space-between", alignItems: "center",
-            padding: "10px 0", borderBottom: "1px solid #F5F5F7",
-          }}>
-            <span style={{ fontSize: 14, color: "#8E8E93" }}>{label}</span>
-            <span style={{ fontSize: 14, fontWeight: 600, color: "#1D1D1F" }}>{value}</span>
-          </div>
-        ))}
+        {/* ── Infos générales ── */}
+        <Section title="Informations">
+          <InfoRow label="Créée le" value={fmtDate(nc.created_at)} />
+          <InfoRow label="Date cible" value={fmtDate(nc.date_cible)} />
+          {nc.action_owner_name && <InfoRow label="Responsable" value={nc.action_owner_name} />}
+          {nc.statut === "levee" && nc.levee_le && (
+            <div style={{ marginTop: 10, padding: "8px 12px", backgroundColor: "#F0FDF4", borderRadius: 10, border: "1px solid rgba(52,199,89,0.2)" }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#34C759" }}>
+                ✓ Levée le {fmtDate(nc.levee_le)}
+              </span>
+            </div>
+          )}
+        </Section>
 
+        {/* ── Observation ── */}
+        <Section title="Observation">
+          <p style={{ fontSize: 14, color: "#1D1D1F", lineHeight: 1.6, margin: 0 }}>
+            {nc.description}
+          </p>
+        </Section>
 
-        {error && (
-          <div style={{
-            backgroundColor: "#FF3B3015", borderRadius: 10, padding: "10px 14px",
-            marginTop: 12, color: "#FF3B30", fontSize: 13,
-          }}>
-            {error}
-          </div>
+        {/* ── Solution proposée ── */}
+        {nc.solution_text && (
+          <Section title="Solution proposée">
+            <p style={{ fontSize: 14, color: "#1D1D1F", lineHeight: 1.6, margin: 0 }}>
+              {nc.solution_text}
+            </p>
+          </Section>
         )}
 
-        {/* Actions */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 20 }}>
+        {/* ── Action ── */}
+        {(nc.action_comment_text || nc.action_owner_name) && (
+          <Section title="Action corrective">
+            {nc.action_owner_name && (
+              <p style={{ fontSize: 12, fontWeight: 600, color: "#6E6E73", margin: "0 0 6px" }}>
+                Responsable : {nc.action_owner_name}
+              </p>
+            )}
+            {nc.action_comment_text && (
+              <p style={{ fontSize: 14, color: "#1D1D1F", lineHeight: 1.6, margin: 0 }}>
+                {nc.action_comment_text}
+              </p>
+            )}
+          </Section>
+        )}
+
+        {/* ── Coûts ── */}
+        {(nc.cost_expl || nc.cost_iae) && (
+          <Section title="Coûts estimés">
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div style={{ padding: "10px 14px", backgroundColor: "#F5F5F7", borderRadius: 10 }}>
+                <p style={{ fontSize: 11, color: "#8E8E93", margin: "0 0 4px", fontWeight: 600 }}>Exploitation</p>
+                <p style={{ fontSize: 18, fontWeight: 700, color: "#1D1D1F", margin: 0 }}>{fmtCost(nc.cost_expl)}</p>
+              </div>
+              <div style={{ padding: "10px 14px", backgroundColor: "#F5F5F7", borderRadius: 10 }}>
+                <p style={{ fontSize: 11, color: "#8E8E93", margin: "0 0 4px", fontWeight: 600 }}>IAE</p>
+                <p style={{ fontSize: 18, fontWeight: 700, color: "#1D1D1F", margin: 0 }}>{fmtCost(nc.cost_iae)}</p>
+              </div>
+            </div>
+            {coutTotal > 0 && (
+              <p style={{ fontSize: 13, color: "#6E6E73", margin: "10px 0 0", textAlign: "right" }}>
+                Total estimé : <strong style={{ color: "#1D1D1F" }}>{fmtCost(coutTotal)}</strong>
+              </p>
+            )}
+          </Section>
+        )}
+
+        {/* ── Actions ── */}
+        <div style={{ padding: "20px", marginTop: "auto" }}>
+          {error && (
+            <div style={{ backgroundColor: "#FF3B3015", borderRadius: 10, padding: "10px 14px", marginBottom: 12, color: "#FF3B30", fontSize: 13 }}>
+              {error}
+            </div>
+          )}
           {nc.statut === "ouverte" && (
             <button
-              onClick={() => passer("en_cours")}
+              onClick={marquerLevee}
               disabled={saving}
               style={{
-                padding: "14px", backgroundColor: saving ? "#C7C7CC" : "#FF9500",
-                color: "#FFFFFF", border: "none", borderRadius: 14,
-                fontSize: 16, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer",
-              }}
-            >
-              {saving ? "Mise à jour…" : "Passer En cours"}
-            </button>
-          )}
-          {nc.statut === "en_cours" && (
-            <button
-              onClick={() => passer("levee")}
-              disabled={saving}
-              style={{
-                padding: "14px",
+                width: "100%", padding: "14px",
                 backgroundColor: saving ? "#C7C7CC" : "#34C759",
                 color: "#FFFFFF", border: "none", borderRadius: 14,
-                fontSize: 16, fontWeight: 600,
-                cursor: saving ? "not-allowed" : "pointer",
+                fontSize: 15, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer",
+                boxShadow: saving ? "none" : "0 2px 10px rgba(52,199,89,0.35)",
+                marginBottom: 10,
               }}
             >
-              {saving ? "Clôture…" : "Marquer comme levée"}
+              {saving ? "Enregistrement…" : "Marquer comme levée ✓"}
             </button>
           )}
           <button
             onClick={onClose}
             style={{
-              padding: "14px", backgroundColor: "transparent",
+              width: "100%", padding: "12px", backgroundColor: "transparent",
               color: "#8E8E93", border: "1px solid rgba(0,0,0,0.10)", borderRadius: 14,
-              fontSize: 16, cursor: "pointer",
+              fontSize: 15, cursor: "pointer",
             }}
           >
             Fermer
@@ -283,12 +368,10 @@ function DetailDrawer({
 // ─── Create sheet ──────────────────────────────────────────────────────────────
 
 function CreateSheet({
-  users,
   controles,
   onClose,
   onCreated,
 }: {
-  users: UserRecord[];
   controles: SetControleItem[];
   onClose: () => void;
   onCreated: () => void;
@@ -297,7 +380,8 @@ function CreateSheet({
   const [gravite, setGravite] = useState<"majeure" | "mineure">("mineure");
   const [controleId, setControleId] = useState("");
   const [dateCible, setDateCible] = useState("");
-  const [assigneeId, setAssigneeId] = useState("");
+  const [ownerName, setOwnerName] = useState("");
+  const [solutionText, setSolutionText] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -311,11 +395,11 @@ function CreateSheet({
         gravite,
         set_controle_id: controleId || undefined,
         date_cible: dateCible || undefined,
-        assigne_a: assigneeId || undefined,
+        action_owner_name: ownerName.trim() || undefined,
+        solution_text: solutionText.trim() || undefined,
       });
       onCreated();
     } catch (e) {
-      console.error("createNC error:", e);
       const msg = e instanceof Error ? e.message : (e as { message?: string })?.message ?? "Erreur inconnue";
       setError(msg);
       setSaving(false);
@@ -328,103 +412,114 @@ function CreateSheet({
       <div style={{
         position: "fixed", bottom: 0, left: 0, right: 0,
         backgroundColor: "#FFFFFF", borderRadius: "24px 24px 0 0",
-        padding: "20px 20px 44px", zIndex: 201,
+        padding: "20px 20px 48px", zIndex: 201,
         maxHeight: "90vh", overflowY: "auto",
       }}>
-        <div style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: "#C7C7CC", margin: "0 auto 20px" }} />
-        <h2 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 20px" }}>Nouvelle non-conformité</h2>
+        <div style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: "#C7C7CC", margin: "0 auto 18px" }} />
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Nouvelle non-conformité</h2>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+            <X size={20} color="#8E8E93" />
+          </button>
+        </div>
 
         {error && (
-          <div style={{
-            backgroundColor: "#FF3B3015", borderRadius: 10, padding: "10px 14px",
-            marginBottom: 16, color: "#FF3B30", fontSize: 13,
-          }}>
+          <div style={{ backgroundColor: "#FF3B3015", borderRadius: 10, padding: "10px 14px", marginBottom: 16, color: "#FF3B30", fontSize: 13 }}>
             {error}
           </div>
         )}
 
-        {/* Description */}
-        <div style={{ marginBottom: 16 }}>
-          <label style={labelSt}>Description *</label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={3}
-            placeholder="Décrivez la non-conformité constatée…"
-            style={{ ...inputSt, resize: "vertical" as const }}
-          />
-        </div>
-
-        {/* Gravité */}
-        <div style={{ marginBottom: 16 }}>
-          <label style={labelSt}>Gravité</label>
-          <div style={{ display: "flex", gap: 10 }}>
-            {(["majeure", "mineure"] as const).map((g) => (
-              <button
-                key={g}
-                onClick={() => setGravite(g)}
-                style={{
-                  flex: 1, padding: "10px 0", borderRadius: 10, border: "none",
-                  backgroundColor: gravite === g
-                    ? (g === "majeure" ? "#FF3B30" : "#FF9500")
-                    : "#F5F5F7",
-                  color: gravite === g ? "#FFFFFF" : "#6E6E73",
-                  fontSize: 14, fontWeight: 600, cursor: "pointer",
-                  textTransform: "capitalize" as const,
-                }}
-              >
-                {g.charAt(0).toUpperCase() + g.slice(1)}
-              </button>
-            ))}
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {/* Description */}
+          <div>
+            <label style={labelSt}>DESCRIPTION *</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+              placeholder="Décrivez la non-conformité constatée…"
+              style={{ ...inputSt, resize: "vertical" as const }}
+            />
           </div>
-        </div>
 
-        {/* Contrôle SET */}
-        <div style={{ marginBottom: 16 }}>
-          <label style={labelSt}>Contrôle SET associé</label>
-          <select value={controleId} onChange={(e) => setControleId(e.target.value)} style={inputSt}>
-            <option value="">— Aucun —</option>
-            {controles.map((c) => (
-              <option key={c.id} value={c.id}>{c.nom}</option>
-            ))}
-          </select>
-        </div>
+          {/* Gravité */}
+          <div>
+            <label style={labelSt}>GRAVITÉ</label>
+            <div style={{ display: "flex", gap: 10 }}>
+              {(["majeure", "mineure"] as const).map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => setGravite(g)}
+                  style={{
+                    flex: 1, padding: "10px 0", borderRadius: 10, border: "none",
+                    backgroundColor: gravite === g ? (g === "majeure" ? "#FF3B30" : "#FF9500") : "#F5F5F7",
+                    color: gravite === g ? "#FFFFFF" : "#6E6E73",
+                    fontSize: 14, fontWeight: 600, cursor: "pointer",
+                    textTransform: "capitalize" as const,
+                  }}
+                >
+                  {g.charAt(0).toUpperCase() + g.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
 
-        {/* Date cible */}
-        <div style={{ marginBottom: 16 }}>
-          <label style={labelSt}>Date cible</label>
-          <input
-            type="date"
-            value={dateCible}
-            onChange={(e) => setDateCible(e.target.value)}
-            style={inputSt}
-          />
-        </div>
+          {/* Contrôle SET */}
+          <div>
+            <label style={labelSt}>CONTRÔLE SET ASSOCIÉ</label>
+            <select value={controleId} onChange={(e) => setControleId(e.target.value)} style={{ ...inputSt, appearance: "none" as const }}>
+              <option value="">— Aucun —</option>
+              {controles.map((c) => (
+                <option key={c.id} value={c.id}>{c.nom}</option>
+              ))}
+            </select>
+          </div>
 
-        {/* Assignée à */}
-        <div style={{ marginBottom: 24 }}>
-          <label style={labelSt}>Assignée à</label>
-          <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} style={inputSt}>
-            <option value="">— Non assignée —</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>{u.prenom} {u.nom}</option>
-            ))}
-          </select>
-        </div>
+          {/* Date cible */}
+          <div>
+            <label style={labelSt}>DATE CIBLE</label>
+            <input type="date" value={dateCible} onChange={(e) => setDateCible(e.target.value)} style={inputSt} />
+          </div>
 
-        <button
-          onClick={handleSubmit}
-          disabled={saving}
-          style={{
-            width: "100%", padding: "14px",
-            backgroundColor: saving ? "#C7C7CC" : "#2563EB",
-            color: "#FFFFFF", border: "none", borderRadius: 14,
-            fontSize: 16, fontWeight: 600,
-            cursor: saving ? "not-allowed" : "pointer",
-          }}
-        >
-          {saving ? "Création…" : "Créer la NC"}
-        </button>
+          {/* Responsable */}
+          <div>
+            <label style={labelSt}>RESPONSABLE</label>
+            <input
+              type="text"
+              value={ownerName}
+              onChange={(e) => setOwnerName(e.target.value)}
+              placeholder="Nom du responsable de l'action"
+              style={inputSt}
+            />
+          </div>
+
+          {/* Solution proposée */}
+          <div>
+            <label style={labelSt}>SOLUTION PROPOSÉE</label>
+            <textarea
+              value={solutionText}
+              onChange={(e) => setSolutionText(e.target.value)}
+              rows={2}
+              placeholder="Description de la solution envisagée…"
+              style={{ ...inputSt, resize: "vertical" as const }}
+            />
+          </div>
+
+          <button
+            onClick={handleSubmit}
+            disabled={saving}
+            style={{
+              width: "100%", padding: "14px",
+              backgroundColor: saving ? "#C7C7CC" : "#2563EB",
+              color: "#FFFFFF", border: "none", borderRadius: 14,
+              fontSize: 16, fontWeight: 600, cursor: saving ? "not-allowed" : "pointer",
+              boxShadow: saving ? "none" : "0 2px 10px rgba(37,99,235,0.3)",
+            }}
+          >
+            {saving ? "Création…" : "Créer la NC"}
+          </button>
+        </div>
       </div>
     </>
   );
@@ -432,12 +527,19 @@ function CreateSheet({
 
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
-type Filter = "toutes" | "majeures" | "mineures" | "levees";
+type Filter = "toutes" | "majeures" | "mineures" | "ouvertes" | "levees";
+
+const FILTERS: { key: Filter; label: string }[] = [
+  { key: "toutes", label: "Toutes" },
+  { key: "ouvertes", label: "Ouvertes" },
+  { key: "majeures", label: "Majeures" },
+  { key: "mineures", label: "Mineures" },
+  { key: "levees", label: "Levées" },
+];
 
 export default function NonConformitesPage() {
   const [ncs, setNcs] = useState<NCRecord[]>([]);
-  const [kpis, setKpis] = useState<NCKPIs>({ ouvertesTotal: 0, majeuresOuvertes: 0, leevesCeMois: 0 });
-  const [users, setUsers] = useState<UserRecord[]>([]);
+  const [kpis, setKpis] = useState<NCKPIs>({ ouvertesTotal: 0, majeuresOuvertes: 0, leveeTotal: 0, coutTotal: 0 });
   const [controles, setControles] = useState<SetControleItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>("toutes");
@@ -446,15 +548,13 @@ export default function NonConformitesPage() {
 
   const loadAll = useCallback(async () => {
     setLoading(true);
-    const [ncData, kpiData, userData, controleData] = await Promise.all([
+    const [ncData, kpiData, controleData] = await Promise.all([
       fetchNonConformites(),
       fetchNCKPIs(),
-      fetchUsers(),
       fetchSetControlesList(),
     ]);
     setNcs(ncData);
     setKpis(kpiData);
-    setUsers(userData);
     setControles(controleData);
     setLoading(false);
   }, []);
@@ -466,48 +566,47 @@ export default function NonConformitesPage() {
     loadAll();
   }
 
-  // Filter logic
   const filtered = ncs.filter((nc) => {
-    if (filter === "majeures") return nc.gravite === "majeure" && nc.statut !== "levee";
-    if (filter === "mineures") return nc.gravite === "mineure" && nc.statut !== "levee";
+    if (filter === "ouvertes") return nc.statut === "ouverte";
+    if (filter === "majeures") return nc.gravite === "majeure" && nc.statut === "ouverte";
+    if (filter === "mineures") return nc.gravite === "mineure" && nc.statut === "ouverte";
     if (filter === "levees") return nc.statut === "levee";
-    return true; // toutes
+    return true;
   });
 
   const counts: Record<Filter, number> = {
     toutes: ncs.length,
-    majeures: ncs.filter((nc) => nc.gravite === "majeure" && nc.statut !== "levee").length,
-    mineures: ncs.filter((nc) => nc.gravite === "mineure" && nc.statut !== "levee").length,
+    ouvertes: ncs.filter((nc) => nc.statut === "ouverte").length,
+    majeures: ncs.filter((nc) => nc.gravite === "majeure" && nc.statut === "ouverte").length,
+    mineures: ncs.filter((nc) => nc.gravite === "mineure" && nc.statut === "ouverte").length,
     levees: ncs.filter((nc) => nc.statut === "levee").length,
   };
 
-  const FILTERS: { key: Filter; label: string }[] = [
-    { key: "toutes", label: "Toutes" },
-    { key: "majeures", label: "Majeures" },
-    { key: "mineures", label: "Mineures" },
-    { key: "levees", label: "Levées" },
-  ];
+  const coutFormatted = kpis.coutTotal > 0
+    ? new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(kpis.coutTotal)
+    : "—";
 
   return (
     <div style={{ backgroundColor: "#F5F5F7", minHeight: "100vh", paddingBottom: 90 }}>
 
       {/* Header */}
       <div style={{ backgroundColor: "#FFFFFF", padding: "16px 16px 12px", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
-        <h1 style={{ fontSize: 28, fontWeight: 700, margin: "0 0 4px" }}>Non-conformités</h1>
+        <h1 style={{ fontSize: 28, fontWeight: 700, margin: "0 0 4px", letterSpacing: "-0.5px" }}>Non-conformités</h1>
         <p style={{ fontSize: 14, color: "#8E8E93", margin: 0 }}>
-          Suivi des écarts et actions correctives
+          {ncs.length} NC · Suivi des écarts et actions correctives
         </p>
       </div>
 
       {/* KPIs */}
-      <div style={{ display: "flex", gap: 12, padding: "16px 16px 0" }}>
-        <KpiCard label="Ouvertes" value={kpis.ouvertesTotal} color="#1D1D1F" />
-        <KpiCard label="Majeures" value={kpis.majeuresOuvertes} color="#FF3B30" sub="non levées" />
-        <KpiCard label="Levées" value={kpis.leevesCeMois} color="#34C759" sub="ce mois" />
+      <div style={{ display: "flex", gap: 10, padding: "14px 16px 0", overflowX: "auto" }}>
+        <KpiCard label="Ouvertes" value={`${kpis.ouvertesTotal}`} color={kpis.ouvertesTotal > 0 ? "#FF3B30" : "#34C759"} />
+        <KpiCard label="Majeures" value={`${kpis.majeuresOuvertes}`} color={kpis.majeuresOuvertes > 0 ? "#FF3B30" : "#34C759"} sub="ouvertes" />
+        <KpiCard label="Levées" value={`${kpis.leveeTotal}`} color="#34C759" />
+        <KpiCard label="Coût total" value={coutFormatted} color="#1D1D1F" sub="estimé" />
       </div>
 
       {/* Filter pills */}
-      <div style={{ display: "flex", gap: 8, padding: "16px 16px 0", overflowX: "auto" }}>
+      <div style={{ display: "flex", gap: 8, padding: "12px 16px 0", overflowX: "auto" }}>
         {FILTERS.map(({ key, label }) => (
           <button
             key={key}
@@ -519,23 +618,20 @@ export default function NonConformitesPage() {
               border: "none",
               backgroundColor: filter === key ? "#2563EB" : "#FFFFFF",
               color: filter === key ? "#FFFFFF" : "#6E6E73",
-              fontSize: 14,
+              fontSize: 13,
               fontWeight: filter === key ? 700 : 400,
               cursor: "pointer",
               boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
               display: "flex",
               alignItems: "center",
-              gap: 6,
+              gap: 5,
             }}
           >
             {label}
             <span style={{
               backgroundColor: filter === key ? "rgba(255,255,255,0.3)" : "#F5F5F7",
               color: filter === key ? "#FFFFFF" : "#8E8E93",
-              borderRadius: 10,
-              fontSize: 11,
-              fontWeight: 700,
-              padding: "1px 6px",
+              borderRadius: 10, fontSize: 11, fontWeight: 700, padding: "1px 6px",
             }}>
               {counts[key]}
             </span>
@@ -544,7 +640,7 @@ export default function NonConformitesPage() {
       </div>
 
       {/* List */}
-      <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
         {loading ? (
           <div style={{ textAlign: "center", padding: 48, color: "#8E8E93" }}>Chargement…</div>
         ) : filtered.length === 0 ? (
@@ -567,12 +663,12 @@ export default function NonConformitesPage() {
         onClick={() => setShowCreate(true)}
         style={{
           position: "fixed", bottom: 80, right: 20,
-          width: 56, height: 56, borderRadius: 28,
+          width: 52, height: 52, borderRadius: 26,
           backgroundColor: "#2563EB", color: "#FFFFFF",
-          fontSize: 28, border: "none", cursor: "pointer",
+          fontSize: 26, border: "none", cursor: "pointer",
           boxShadow: "0 4px 16px rgba(37,99,235,0.4)",
           display: "flex", alignItems: "center", justifyContent: "center",
-          zIndex: 100,
+          zIndex: 100, fontWeight: 300,
         }}
       >
         +
@@ -590,7 +686,6 @@ export default function NonConformitesPage() {
       {/* Create sheet */}
       {showCreate && (
         <CreateSheet
-          users={users}
           controles={controles}
           onClose={() => setShowCreate(false)}
           onCreated={() => { setShowCreate(false); loadAll(); }}

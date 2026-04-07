@@ -319,10 +319,10 @@ export default function DashboardPage() {
             <KpiSkeleton />
           ) : (
             <KpiCard
-              label="Non-conformités"
-              value={`${kpis.nonConformitesMajeures}`}
-              subtext={kpis.nonConformitesMajeures === 0 ? "RAS ✓" : "Ouvertes"}
-              color={kpis.nonConformitesMajeures === 0 ? "#34C759" : "#FF9500"}
+              label="NC ouvertes"
+              value={`${kpis.ncOuvertes}`}
+              subtext={kpis.ncOuvertes === 0 ? "RAS ✓" : `dont ${kpis.nonConformitesMajeures} majeure${kpis.nonConformitesMajeures > 1 ? "s" : ""}`}
+              color={kpis.ncOuvertes === 0 ? "#34C759" : kpis.nonConformitesMajeures > 0 ? "#FF3B30" : "#FF9500"}
             />
           )}
         </div>
