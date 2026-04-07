@@ -578,6 +578,53 @@ function CreateSheet({ controles, onClose, onCreated }: { controles: SetControle
   );
 }
 
+// ─── Graphique évolution ───────────────────────────────────────────────────────
+
+function EvolutionChart({ evolution }: { evolution: NCEvolutionItem[] }) {
+  if (evolution.length === 0) return null;
+  const maxTotal = Math.max(...evolution.map(e => e.total), 1);
+  const BAR_H = 80;
+  return (
+    <div style={{ backgroundColor: "#FFFFFF", borderRadius: 14, padding: "16px 20px", boxShadow: "0 1px 6px rgba(0,0,0,0.06)", border: "1px solid rgba(0,0,0,0.05)" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+        <p style={{ fontSize: 13, fontWeight: 600, color: "#1D1D1F", margin: 0 }}>Évolution sur 6 mois</p>
+        <div style={{ display: "flex", gap: 12 }}>
+          {([{ color: "#FF3B30", label: "Majeures" }, { color: "#2563EB", label: "Levées" }, { color: "#E5E7EB", label: "Total" }] as const).map(({ color, label }) => (
+            <div key={label} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <div style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: color }} />
+              <span style={{ fontSize: 11, color: "#AEAEB2" }}>{label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: BAR_H + 28 }}>
+        {evolution.map((item) => {
+          const rest = Math.max(0, item.total - item.majeures - item.levees);
+          return (
+            <div key={item.month} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+              <span style={{ fontSize: 10, fontWeight: 600, color: item.total > 0 ? "#1D1D1F" : "#AEAEB2", minHeight: 14 }}>
+                {item.total > 0 ? item.total : ""}
+              </span>
+              <div style={{ width: "100%", height: BAR_H, display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 1 }}>
+                {item.total > 0 ? (
+                  <>
+                    {item.levees > 0 && <div style={{ width: "100%", height: Math.max(3, (item.levees / maxTotal) * BAR_H), backgroundColor: "#2563EB", borderRadius: "3px 3px 0 0" }} />}
+                    {item.majeures > 0 && <div style={{ width: "100%", height: Math.max(3, (item.majeures / maxTotal) * BAR_H), backgroundColor: "#FF3B30" }} />}
+                    {rest > 0 && <div style={{ width: "100%", height: Math.max(3, (rest / maxTotal) * BAR_H), backgroundColor: "#E5E7EB", borderRadius: item.majeures === 0 && item.levees === 0 ? "3px 3px 0 0" : 0 }} />}
+                  </>
+                ) : (
+                  <div style={{ width: "100%", height: 3, backgroundColor: "#F5F5F7", borderRadius: 2 }} />
+                )}
+              </div>
+              <span style={{ fontSize: 10, color: "#AEAEB2", marginTop: 2 }}>{item.label}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
 type Filter = "toutes" | "ouvertes" | "majeures" | "mineures" | "levees";
@@ -742,49 +789,7 @@ export default function NonConformitesPage() {
         </div>
 
         {/* ── Évolution 6 mois ── */}
-        {evolution.length > 0 && (() => {
-          const maxTotal = Math.max(...evolution.map(e => e.total), 1);
-          const BAR_H = 80;
-          return (
-            <div style={{ backgroundColor: "#FFFFFF", borderRadius: 14, padding: "16px 20px", boxShadow: "0 1px 6px rgba(0,0,0,0.06)", border: "1px solid rgba(0,0,0,0.05)" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-                <p style={{ fontSize: 13, fontWeight: 600, color: "#1D1D1F", margin: 0 }}>Évolution sur 6 mois</p>
-                <div style={{ display: "flex", gap: 12 }}>
-                  {[{ color: "#FF3B30", label: "Majeures" }, { color: "#2563EB", label: "Levées" }, { color: "#E5E7EB", label: "Total" }].map(({ color, label }) => (
-                    <div key={label} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                      <div style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: color }} />
-                      <span style={{ fontSize: 11, color: "#AEAEB2" }}>{label}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: BAR_H + 28 }}>
-                {evolution.map((item) => (
-                  <div key={item.month} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                    {/* valeur */}
-                    <span style={{ fontSize: 10, fontWeight: 600, color: item.total > 0 ? "#1D1D1F" : "#AEAEB2", minHeight: 14 }}>
-                      {item.total > 0 ? item.total : ""}
-                    </span>
-                    {/* barres empilées */}
-                    <div style={{ width: "100%", height: BAR_H, display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 1 }}>
-                      {item.total > 0 ? (
-                        <>
-                          <div style={{ width: "100%", height: Math.max(3, (item.levees / maxTotal) * BAR_H), backgroundColor: "#2563EB", borderRadius: "3px 3px 0 0" }} />
-                          <div style={{ width: "100%", height: Math.max(item.majeures > 0 ? 3 : 0, (item.majeures / maxTotal) * BAR_H), backgroundColor: "#FF3B30" }} />
-                          <div style={{ width: "100%", height: Math.max(3, ((item.total - item.majeures - item.levees) / maxTotal) * BAR_H), backgroundColor: "#E5E7EB", borderRadius: item.majeures === 0 && item.levees === 0 ? "3px 3px 0 0" : 0 }} />
-                        </>
-                      ) : (
-                        <div style={{ width: "100%", height: 3, backgroundColor: "#F5F5F7", borderRadius: 2 }} />
-                      )}
-                    </div>
-                    {/* label mois */}
-                    <span style={{ fontSize: 10, color: "#AEAEB2", marginTop: 2 }}>{item.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })()}
+        <EvolutionChart evolution={evolution} />
 
         {/* ── Filtres ── */}
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -807,9 +812,12 @@ export default function NonConformitesPage() {
 
         {/* ── Recherche ── */}
         <div style={{ position: "relative" }}>
-          <Search size={15} color="#AEAEB2" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+          <div style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", display: "flex", alignItems: "center" }}>
+            <Search size={15} color="#AEAEB2" />
+          </div>
           <input
             type="text"
+            autoComplete="off"
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Rechercher une NC (description, n° obs., responsable…)"
@@ -817,6 +825,7 @@ export default function NonConformitesPage() {
           />
           {search && (
             <button
+              type="button"
               onClick={() => setSearch("")}
               style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex", alignItems: "center" }}
             >
