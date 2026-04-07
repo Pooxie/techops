@@ -683,7 +683,7 @@ export default function NonConformitesPage() {
     if (!q) return filtered;
     return filtered.filter(nc =>
       nc.description.toLowerCase().includes(q) ||
-      (nc.source_obs_no ?? "").toLowerCase().includes(q) ||
+      String(nc.source_obs_no ?? "").toLowerCase().includes(q) ||
       (nc.action_owner_name ?? "").toLowerCase().includes(q)
     );
   }, [filtered, q]);
