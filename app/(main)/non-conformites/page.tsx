@@ -415,7 +415,7 @@ const FILTERS: { key: Filter; label: string }[] = [
 
 export default function NonConformitesPage() {
   const [ncs, setNcs] = useState<NCRecord[]>([]);
-  const [kpis, setKpis] = useState<NCKPIs>({ ouvertesTotal: 0, majeuresOuvertes: 0, leveeTotal: 0, coutTotal: 0 });
+  const [kpis, setKpis] = useState<NCKPIs>({ ouvertesTotal: 0, majeuresOuvertes: 0, leveeTotal: 0, coutTotal: 0, coutExpl: 0, coutIae: 0 });
   const [controles, setControles] = useState<SetControleItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>("toutes");
@@ -472,11 +472,6 @@ export default function NonConformitesPage() {
     });
   }, [filtered]);
 
-  const coutFormatted = useMemo(() => {
-    if (kpis.coutTotal === 0) return null;
-    return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(kpis.coutTotal);
-  }, [kpis.coutTotal]);
-
   return (
     <>
       <Header title="Non-conformités" subtitle="Sofitel Ajaccio" />
@@ -501,19 +496,20 @@ export default function NonConformitesPage() {
         </div>
 
         {/* ── KPIs ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10 }}>
           {[
-            { label: "Ouvertes", value: `${kpis.ouvertesTotal}`, color: kpis.ouvertesTotal > 0 ? "#FF3B30" : "#34C759", icon: <AlertTriangle size={14} /> },
-            { label: "Majeures", value: `${kpis.majeuresOuvertes}`, color: kpis.majeuresOuvertes > 0 ? "#FF3B30" : "#34C759", sub: "ouvertes" },
-            { label: "Levées", value: `${kpis.leveeTotal}`, color: "#34C759", icon: <CheckCircle2 size={14} /> },
-            { label: "Coût estimé", value: coutFormatted ?? "—", color: "#1D1D1F" },
+            { label: "Ouvertes",  value: `${kpis.ouvertesTotal}`,     color: kpis.ouvertesTotal > 0 ? "#FF3B30" : "#34C759", icon: <AlertTriangle size={13} /> },
+            { label: "Majeures",  value: `${kpis.majeuresOuvertes}`,  color: kpis.majeuresOuvertes > 0 ? "#FF3B30" : "#34C759", sub: "ouvertes" },
+            { label: "Levées",    value: `${kpis.leveeTotal}`,        color: "#34C759", icon: <CheckCircle2 size={13} /> },
+            { label: "Coût Expl.", value: kpis.coutExpl > 0 ? new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(kpis.coutExpl) : "—", color: "#1D1D1F", sub: "exploitation" },
+            { label: "Coût IAE",  value: kpis.coutIae  > 0 ? new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(kpis.coutIae)  : "—", color: "#1D1D1F", sub: "investissement" },
           ].map(({ label, value, color, sub, icon }) => (
             <div key={label} style={{ backgroundColor: "#FFFFFF", borderRadius: 14, padding: "14px 16px", boxShadow: "0 1px 6px rgba(0,0,0,0.06)", border: "1px solid rgba(0,0,0,0.05)" }}>
               <p style={{ fontSize: 10, fontWeight: 700, color: "#AEAEB2", textTransform: "uppercase", letterSpacing: "0.6px", margin: "0 0 6px", display: "flex", alignItems: "center", gap: 4 }}>
                 {icon} {label}
               </p>
-              <p style={{ fontSize: 24, fontWeight: 700, color, margin: 0, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{value}</p>
-              {sub && <p style={{ fontSize: 11, color: "#AEAEB2", margin: "3px 0 0" }}>{sub}</p>}
+              <p style={{ fontSize: 20, fontWeight: 700, color, margin: 0, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{value}</p>
+              {sub && <p style={{ fontSize: 10, color: "#AEAEB2", margin: "3px 0 0" }}>{sub}</p>}
             </div>
           ))}
         </div>

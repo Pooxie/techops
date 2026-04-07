@@ -10,11 +10,42 @@ export function createClient() {
 
 export type DashboardKPIs = {
   scoreConformite: number;
+  totalControles: number;
+  controlesOk: number;
+  controlesAlerte: number;
   equipementsCritiques: number;
   ncOuvertes: number;
+  ncMineuresOuvertes: number;
   nonConformitesMajeures: number;
+  ncLevees: number;
   prestatairesCetteSemaine: number;
 };
+
+export type NCParControleItem = { nom: string; count: number; majeures: number };
+
+export async function fetchTopNCParControle(): Promise<NCParControleItem[]> {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("non_conformites")
+    .select("gravite, statut, controle:set_controles(nom)")
+    .eq("statut", "ouverte");
+
+  if (!data) return [];
+
+  const map = new Map<string, { count: number; majeures: number }>();
+  for (const row of data) {
+    const nom = (row.controle as unknown as { nom: string } | null)?.nom ?? "Sans contrôle";
+    const entry = map.get(nom) ?? { count: 0, majeures: 0 };
+    entry.count++;
+    if (row.gravite === "majeure") entry.majeures++;
+    map.set(nom, entry);
+  }
+
+  return Array.from(map.entries())
+    .map(([nom, d]) => ({ nom, ...d }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6);
+}
 
 export type AlertePrioritaire = {
   id: string;
@@ -334,47 +365,23 @@ export async function fetchDashboardKPIs(): Promise<DashboardKPIs> {
   const [
     { count: totalControles },
     { count: controlesOk },
+    { count: controlesAlerte },
     { count: controlesRetard },
     { count: ncOuvertes },
     { count: ncMajeures },
+    { count: ncMineures },
+    { count: ncLevees },
     { count: prestatairesSemaine },
   ] = await Promise.all([
-    // Total contrôles
-    supabase
-      .from("set_controles")
-      .select("*", { count: "exact", head: true }),
-
-    // Contrôles OK
-    supabase
-      .from("set_controles")
-      .select("*", { count: "exact", head: true })
-      .eq("statut", "ok"),
-
-    // Équipements en retard = critiques
-    supabase
-      .from("set_controles")
-      .select("*", { count: "exact", head: true })
-      .eq("statut", "retard"),
-
-    // NC ouvertes (toutes)
-    supabase
-      .from("non_conformites")
-      .select("*", { count: "exact", head: true })
-      .eq("statut", "ouverte"),
-
-    // Non-conformités majeures ouvertes
-    supabase
-      .from("non_conformites")
-      .select("*", { count: "exact", head: true })
-      .eq("gravite", "majeure")
-      .eq("statut", "ouverte"),
-
-    // Prestataires cette semaine (date_prochaine entre aujourd'hui et +7j)
-    supabase
-      .from("set_controles")
-      .select("*", { count: "exact", head: true })
-      .gte("date_prochaine", todayStr)
-      .lte("date_prochaine", in7daysStr),
+    supabase.from("set_controles").select("*", { count: "exact", head: true }),
+    supabase.from("set_controles").select("*", { count: "exact", head: true }).eq("statut", "ok"),
+    supabase.from("set_controles").select("*", { count: "exact", head: true }).eq("statut", "alerte"),
+    supabase.from("set_controles").select("*", { count: "exact", head: true }).eq("statut", "retard"),
+    supabase.from("non_conformites").select("*", { count: "exact", head: true }).eq("statut", "ouverte"),
+    supabase.from("non_conformites").select("*", { count: "exact", head: true }).eq("gravite", "majeure").eq("statut", "ouverte"),
+    supabase.from("non_conformites").select("*", { count: "exact", head: true }).eq("gravite", "mineure").eq("statut", "ouverte"),
+    supabase.from("non_conformites").select("*", { count: "exact", head: true }).eq("statut", "levee"),
+    supabase.from("set_controles").select("*", { count: "exact", head: true }).gte("date_prochaine", todayStr).lte("date_prochaine", in7daysStr),
   ]);
 
   const total = totalControles ?? 0;
@@ -383,9 +390,14 @@ export async function fetchDashboardKPIs(): Promise<DashboardKPIs> {
 
   return {
     scoreConformite,
+    totalControles: total,
+    controlesOk: ok,
+    controlesAlerte: controlesAlerte ?? 0,
     equipementsCritiques: controlesRetard ?? 0,
     ncOuvertes: ncOuvertes ?? 0,
+    ncMineuresOuvertes: ncMineures ?? 0,
     nonConformitesMajeures: ncMajeures ?? 0,
+    ncLevees: ncLevees ?? 0,
     prestatairesCetteSemaine: prestatairesSemaine ?? 0,
   };
 }
@@ -1009,6 +1021,8 @@ export type NCKPIs = {
   majeuresOuvertes: number;
   leveeTotal: number;
   coutTotal: number;
+  coutExpl: number;
+  coutIae: number;
 };
 
 export type SetControleItem = { id: string; nom: string };
@@ -1080,16 +1094,16 @@ export async function fetchNCKPIs(): Promise<NCKPIs> {
   if (e3) console.error("[NCKPIs] levees:", e3.message);
   if (e4) console.error("[NCKPIs] cout:", e4.message);
 
-  const coutTotal = (coutData ?? []).reduce(
-    (sum, row) => sum + (row.cost_expl ?? 0) + (row.cost_iae ?? 0),
-    0
-  );
+  const coutExpl  = (coutData ?? []).reduce((s, r) => s + (r.cost_expl ?? 0), 0);
+  const coutIae   = (coutData ?? []).reduce((s, r) => s + (r.cost_iae  ?? 0), 0);
 
   return {
     ouvertesTotal: ouvertes ?? 0,
     majeuresOuvertes: majeures ?? 0,
     leveeTotal: levees ?? 0,
-    coutTotal,
+    coutTotal: coutExpl + coutIae,
+    coutExpl,
+    coutIae,
   };
 }
 

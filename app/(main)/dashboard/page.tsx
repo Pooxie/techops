@@ -7,9 +7,11 @@ import {
   fetchDashboardKPIs,
   fetchAlertesPrioritaires,
   fetchAvancementMensuel,
+  fetchTopNCParControle,
   type DashboardKPIs,
   type AlertePrioritaire,
   type AvancementCategorie,
+  type NCParControleItem,
 } from "@/lib/supabase";
 
 // ─── SVG pattern pour carte héro ──────────────────────────────────────────────
@@ -238,22 +240,131 @@ function KpiCard({
   );
 }
 
+// ─── Donut SVG ────────────────────────────────────────────────────────────────
+
+function DonutChart({
+  segments,
+  size = 120,
+  label,
+  sublabel,
+}: {
+  segments: { value: number; color: string }[];
+  size?: number;
+  label?: string;
+  sublabel?: string;
+}) {
+  const total = segments.reduce((s, seg) => s + seg.value, 0);
+  if (total === 0) return (
+    <div style={{ width: size, height: size, borderRadius: "50%", backgroundColor: "#F5F5F7", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <span style={{ fontSize: 12, color: "#AEAEB2" }}>—</span>
+    </div>
+  );
+
+  const r = 44;
+  const cx = size / 2;
+  const cy = size / 2;
+  const strokeW = 16;
+  const circumference = 2 * Math.PI * r;
+
+  let offset = 0;
+  const arcs = segments.map(seg => {
+    const pct = seg.value / total;
+    const dash = pct * circumference;
+    const arc = { dash, offset: circumference - offset, color: seg.color };
+    offset += dash;
+    return arc;
+  });
+
+  return (
+    <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
+      <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#F5F5F7" strokeWidth={strokeW} />
+        {arcs.map((arc, i) => (
+          <circle key={i} cx={cx} cy={cy} r={r} fill="none"
+            stroke={arc.color} strokeWidth={strokeW}
+            strokeDasharray={`${arc.dash} ${circumference}`}
+            strokeDashoffset={arc.offset}
+            style={{ transition: "stroke-dasharray 0.6s ease" }}
+          />
+        ))}
+      </svg>
+      {(label !== undefined) && (
+        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+          <span style={{ fontSize: 20, fontWeight: 700, color: "#1D1D1F", lineHeight: 1 }}>{label}</span>
+          {sublabel && <span style={{ fontSize: 10, color: "#AEAEB2", marginTop: 2 }}>{sublabel}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Barre empilée horizontale ─────────────────────────────────────────────────
+
+function StackedBar({ segments, height = 10 }: { segments: { value: number; color: string; label: string }[]; height?: number }) {
+  const total = segments.reduce((s, seg) => s + seg.value, 0);
+  if (total === 0) return null;
+  return (
+    <div style={{ display: "flex", borderRadius: 99, overflow: "hidden", height }}>
+      {segments.filter(s => s.value > 0).map((seg, i) => (
+        <div
+          key={i}
+          title={`${seg.label} : ${seg.value}`}
+          style={{ width: `${(seg.value / total) * 100}%`, backgroundColor: seg.color, transition: "width 0.6s ease" }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ─── Barres horizontales (top NC) ─────────────────────────────────────────────
+
+function HBarChart({ items }: { items: NCParControleItem[] }) {
+  const max = Math.max(...items.map(i => i.count), 1);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {items.map(item => (
+        <div key={item.nom}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+            <span style={{ fontSize: 12, color: "#1D1D1F", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0, marginRight: 8 }}>
+              {item.nom}
+            </span>
+            <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+              {item.majeures > 0 && (
+                <span style={{ fontSize: 10, fontWeight: 700, color: "#FF3B30", backgroundColor: "#FF3B3012", padding: "1px 5px", borderRadius: 6 }}>
+                  {item.majeures} maj.
+                </span>
+              )}
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#6E6E73" }}>{item.count}</span>
+            </div>
+          </div>
+          <div style={{ height: 6, backgroundColor: "#F5F5F7", borderRadius: 3, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${(item.count / max) * 100}%`, backgroundColor: item.majeures > 0 ? "#FF3B30" : "#FF9500", borderRadius: 3, transition: "width 0.6s ease" }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
   const [kpis, setKpis] = useState<DashboardKPIs | null>(null);
   const [alertes, setAlertes] = useState<AlertePrioritaire[] | null>(null);
   const [avancement, setAvancement] = useState<AvancementCategorie[] | null>(null);
+  const [topNC, setTopNC] = useState<NCParControleItem[] | null>(null);
 
   useEffect(() => {
     Promise.all([
       fetchDashboardKPIs(),
       fetchAlertesPrioritaires(),
       fetchAvancementMensuel(),
-    ]).then(([k, a, av]) => {
+      fetchTopNCParControle(),
+    ]).then(([k, a, av, nc]) => {
       setKpis(k);
       setAlertes(a);
       setAvancement(av);
+      setTopNC(nc);
     });
   }, []);
 
@@ -369,6 +480,95 @@ export default function DashboardPage() {
             </div>
           </div>
         )}
+
+        {/* ── Santé SET + NC charts ── */}
+        <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
+
+          {/* Santé des contrôles SET */}
+          <div style={{ backgroundColor: "#FFFFFF", borderRadius: 16, padding: 20, boxShadow: "0 2px 8px rgba(0,0,0,0.06)", border: "1px solid rgba(0,0,0,0.05)" }}>
+            <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1D1D1F", margin: "0 0 16px", letterSpacing: "-0.2px" }}>
+              Santé des contrôles SET
+            </h2>
+            {kpis === null ? <RowSkeleton count={3} /> : (
+              <>
+                <StackedBar segments={[
+                  { value: kpis.controlesOk, color: "#34C759", label: "À jour" },
+                  { value: kpis.controlesAlerte, color: "#FF9500", label: "Alerte" },
+                  { value: kpis.equipementsCritiques, color: "#FF3B30", label: "En retard" },
+                ]} height={12} />
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 14 }}>
+                  {[
+                    { label: "À jour", value: kpis.controlesOk, color: "#34C759", pct: Math.round((kpis.controlesOk / Math.max(kpis.totalControles, 1)) * 100) },
+                    { label: "Alerte", value: kpis.controlesAlerte, color: "#FF9500", pct: Math.round((kpis.controlesAlerte / Math.max(kpis.totalControles, 1)) * 100) },
+                    { label: "En retard", value: kpis.equipementsCritiques, color: "#FF3B30", pct: Math.round((kpis.equipementsCritiques / Math.max(kpis.totalControles, 1)) * 100) },
+                  ].map(({ label, value, color, pct }) => (
+                    <div key={label} style={{ padding: "10px 12px", backgroundColor: color + "10", borderRadius: 10, border: `1px solid ${color}22` }}>
+                      <p style={{ fontSize: 10, fontWeight: 700, color, textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 4px" }}>{label}</p>
+                      <p style={{ fontSize: 22, fontWeight: 700, color, margin: 0, lineHeight: 1 }}>{value}</p>
+                      <p style={{ fontSize: 11, color, opacity: 0.7, margin: "2px 0 0" }}>{pct}%</p>
+                    </div>
+                  ))}
+                </div>
+                <p style={{ fontSize: 11, color: "#AEAEB2", margin: "12px 0 0", textAlign: "right" }}>
+                  {kpis.totalControles} contrôles au total
+                </p>
+              </>
+            )}
+          </div>
+
+          {/* Répartition NC */}
+          <div style={{ backgroundColor: "#FFFFFF", borderRadius: 16, padding: 20, boxShadow: "0 2px 8px rgba(0,0,0,0.06)", border: "1px solid rgba(0,0,0,0.05)" }}>
+            <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1D1D1F", margin: "0 0 16px", letterSpacing: "-0.2px" }}>
+              Répartition des NC
+            </h2>
+            {kpis === null ? <RowSkeleton count={3} /> : (
+              <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
+                <DonutChart
+                  size={120}
+                  label={`${kpis.ncOuvertes + kpis.ncLevees}`}
+                  sublabel="NC total"
+                  segments={[
+                    { value: kpis.nonConformitesMajeures, color: "#FF3B30" },
+                    { value: kpis.ncMineuresOuvertes, color: "#FF9500" },
+                    { value: kpis.ncLevees, color: "#34C759" },
+                  ]}
+                />
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+                  {[
+                    { label: "Majeures ouvertes", value: kpis.nonConformitesMajeures, color: "#FF3B30" },
+                    { label: "Mineures ouvertes", value: kpis.ncMineuresOuvertes, color: "#FF9500" },
+                    { label: "Levées", value: kpis.ncLevees, color: "#34C759" },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: color, flexShrink: 0 }} />
+                      <span style={{ fontSize: 12, color: "#6E6E73", flex: 1 }}>{label}</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color }}>{value}</span>
+                    </div>
+                  ))}
+                  <div style={{ marginTop: 4, paddingTop: 8, borderTop: "1px solid #F5F5F7" }}>
+                    <span style={{ fontSize: 11, color: "#AEAEB2" }}>
+                      Taux de levée : <strong style={{ color: "#34C759" }}>
+                        {kpis.ncOuvertes + kpis.ncLevees > 0 ? Math.round((kpis.ncLevees / (kpis.ncOuvertes + kpis.ncLevees)) * 100) : 0}%
+                      </strong>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Top NC par contrôle ── */}
+        <div style={{ backgroundColor: "#FFFFFF", borderRadius: 16, padding: 20, boxShadow: "0 2px 8px rgba(0,0,0,0.06)", border: "1px solid rgba(0,0,0,0.05)" }}>
+          <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1D1D1F", margin: "0 0 16px", letterSpacing: "-0.2px" }}>
+            Contrôles avec le plus de NC ouvertes
+          </h2>
+          {topNC === null ? <RowSkeleton count={5} /> : topNC.length === 0 ? (
+            <p style={{ fontSize: 13, color: "#AEAEB2", margin: 0 }}>Aucune NC ouverte</p>
+          ) : (
+            <HBarChart items={topNC} />
+          )}
+        </div>
 
         {/* ── Ligne alertes + avancement ── */}
         <div
