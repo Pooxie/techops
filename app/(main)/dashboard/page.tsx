@@ -744,6 +744,23 @@ export default function DashboardPage() {
           )}
         </div>
 
+        {/* Bouton Mode TV */}
+        <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: 8, paddingBottom: 4 }}>
+          <a
+            href="/dashboard/tv"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              padding: "7px 14px", borderRadius: 10,
+              border: "1px solid rgba(0,0,0,0.10)", background: "#1D1D1F",
+              color: "#FFFFFF", fontSize: 12, fontWeight: 600,
+              textDecoration: "none", cursor: "pointer",
+            }}
+          >
+            📺 Mode TV
+          </a>
+        </div>
       </div>
     </>
   );
