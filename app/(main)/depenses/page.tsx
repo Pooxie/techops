@@ -138,6 +138,8 @@ function Lightbox({ url, onClose }: { url: string; onClose: () => void }) {
 
 // ── Modal Dépense ─────────────────────────────────────────────────────────────
 
+type AiField = "type" | "fournisseur" | "montant" | "date" | "description";
+
 function DepenseModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [type, setType]               = useState<DepenseType>("facture_prestataire");
   const [date, setDate]               = useState(todayISO());
@@ -148,17 +150,88 @@ function DepenseModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
   const [preview, setPreview]         = useState<string | null>(null);
   const [uploading, setUploading]     = useState(false);
   const [saving, setSaving]           = useState(false);
+  const [scanning, setScanning]       = useState(false);
+  const [aiFields, setAiFields]       = useState<Set<AiField>>(new Set());
+  const [scanToast, setScanToast]     = useState<{ ok: boolean; msg: string } | null>(null);
   const [error, setError]             = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const scanFileRef = useRef<HTMLInputElement>(null);
+  const manualFileRef = useRef<HTMLInputElement>(null);
 
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+  // Dismiss scan toast after 4s
+  useEffect(() => {
+    if (!scanToast) return;
+    const t = setTimeout(() => setScanToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [scanToast]);
+
+  function handleManualFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
     setFile(f);
-    if (f.type.startsWith("image/")) {
-      setPreview(URL.createObjectURL(f));
-    } else {
-      setPreview(null); // PDF — no img preview
+    setAiFields(new Set()); // manual — no AI highlights
+    if (f.type.startsWith("image/")) setPreview(URL.createObjectURL(f));
+    else setPreview(null);
+  }
+
+  async function handleScanFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+
+    // Store photo immediately
+    setFile(f);
+    if (f.type.startsWith("image/")) setPreview(URL.createObjectURL(f));
+
+    if (!f.type.startsWith("image/")) {
+      setScanToast({ ok: false, msg: "Scan IA disponible uniquement pour les images" });
+      setAiFields(new Set());
+      return;
+    }
+
+    setScanning(true);
+    setAiFields(new Set());
+
+    try {
+      // Convert to base64
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          resolve(result.split(",")[1]);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(f);
+      });
+
+      const res = await fetch("/api/scan-facture", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: base64, mediaType: f.type }),
+      });
+
+      const json = await res.json() as { success: boolean; data?: { type: string | null; fournisseur: string | null; montant: number | null; date: string | null; description: string | null }; error?: string };
+
+      if (!json.success || !json.data) {
+        throw new Error(json.error ?? "Erreur d'analyse");
+      }
+
+      const d = json.data;
+      const filled = new Set<AiField>();
+
+      if (d.type && TYPES.includes(d.type as DepenseType)) {
+        setType(d.type as DepenseType);
+        filled.add("type");
+      }
+      if (d.fournisseur) { setFournisseur(d.fournisseur); filled.add("fournisseur"); }
+      if (d.montant != null) { setMontant(String(d.montant)); filled.add("montant"); }
+      if (d.date) { setDate(d.date); filled.add("date"); }
+      if (d.description) { setDescription(d.description); filled.add("description"); }
+
+      setAiFields(filled);
+      setScanToast({ ok: true, msg: "✨ Facture analysée — vérifiez les informations" });
+    } catch (err) {
+      setScanToast({ ok: false, msg: `Impossible de lire la facture — remplissez manuellement` });
+    } finally {
+      setScanning(false);
     }
   }
 
@@ -194,12 +267,20 @@ function DepenseModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
     }
   }
 
-  const inp: React.CSSProperties = {
-    display: "block", width: "100%", marginTop: 5, padding: "10px 12px",
-    borderRadius: 10, border: "1px solid rgba(0,0,0,0.12)", fontSize: 14,
-    outline: "none", boxSizing: "border-box", fontFamily: "inherit",
-  };
+  function aiInp(field: AiField): React.CSSProperties {
+    const base: React.CSSProperties = {
+      display: "block", width: "100%", marginTop: 5, padding: "10px 12px",
+      borderRadius: 10, fontSize: 14, outline: "none",
+      boxSizing: "border-box", fontFamily: "inherit",
+    };
+    if (aiFields.has(field)) {
+      return { ...base, border: "2px solid #2563EB", background: "#EFF6FF" };
+    }
+    return { ...base, border: "1px solid rgba(0,0,0,0.12)" };
+  }
+
   const lbl: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: "#3C3C43" };
+  const disabled = scanning || saving;
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -212,22 +293,120 @@ function DepenseModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
           </button>
         </div>
 
+        {/* Scan toast */}
+        {scanToast && (
+          <div style={{
+            margin: "12px 24px 0",
+            padding: "10px 14px", borderRadius: 10, fontSize: 12, fontWeight: 600,
+            background: scanToast.ok ? "#EFF6FF" : "#FEF2F2",
+            color: scanToast.ok ? "#1D4ED8" : "#B91C1C",
+            border: `1px solid ${scanToast.ok ? "#BFDBFE" : "#FECACA"}`,
+          }}>
+            {scanToast.msg}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} style={{ padding: "20px 24px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
 
-          {/* Type */}
+          {/* ── Photo / Scan section — always first ─────────────────────── */}
           <div>
-            <label style={lbl}>Type de dépense *</label>
+            {/* Hidden inputs */}
+            <input ref={scanFileRef} type="file" accept="image/*" capture="environment"
+              onChange={handleScanFile} style={{ display: "none" }} />
+            <input ref={manualFileRef} type="file" accept="image/*,application/pdf"
+              onChange={handleManualFile} style={{ display: "none" }} />
+
+            {!file ? (
+              /* ── No file yet: show two CTA buttons ── */
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {/* Primary: AI scan */}
+                <button type="button" onClick={() => scanFileRef.current?.click()}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                    padding: "18px 20px", width: "100%", minHeight: 60,
+                    borderRadius: 14, border: "none", cursor: "pointer",
+                    background: "linear-gradient(135deg, #2563EB 0%, #7C3AED 100%)",
+                    color: "#FFF", fontSize: 14, fontWeight: 700,
+                    boxShadow: "0 4px 14px rgba(37,99,235,0.35)",
+                    boxSizing: "border-box",
+                  }}>
+                  <span style={{ fontSize: 18 }}>✨</span>
+                  Scanner la facture avec l'IA
+                </button>
+                {/* Secondary: manual */}
+                <button type="button" onClick={() => manualFileRef.current?.click()}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                    padding: "12px 16px", width: "100%",
+                    borderRadius: 12, border: "1px solid rgba(0,0,0,0.10)",
+                    background: "#FAFAFA", color: "#6E6E73",
+                    fontSize: 12, fontWeight: 500, cursor: "pointer",
+                    boxSizing: "border-box",
+                  }}>
+                  <Camera size={14} />
+                  Ajouter un justificatif sans scan
+                </button>
+              </div>
+            ) : scanning ? (
+              /* ── Scanning in progress ── */
+              <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", background: "#F5F3FF", borderRadius: 14, border: "1px solid #DDD6FE" }}>
+                {preview && (
+                  <img src={preview} alt="" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 8, flexShrink: 0 }} />
+                )}
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <Loader2 size={14} color="#7C3AED" className="animate-spin" />
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#5B21B6" }}>Analyse IA en cours…</span>
+                  </div>
+                  <span style={{ fontSize: 11, color: "#7C3AED" }}>Claude lit votre facture</span>
+                </div>
+              </div>
+            ) : (
+              /* ── File selected, not scanning ── */
+              <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", background: aiFields.size > 0 ? "#EFF6FF" : "#F5F5F7", borderRadius: 12, border: `1px solid ${aiFields.size > 0 ? "#BFDBFE" : "rgba(0,0,0,0.08)"}` }}>
+                {preview ? (
+                  <img src={preview} alt="Aperçu" style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 8, flexShrink: 0 }} />
+                ) : (
+                  <span style={{ fontSize: 24, flexShrink: 0 }}>📄</span>
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: "#1D1D1F", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {aiFields.size > 0 ? "✨ Facture analysée" : file.name}
+                  </p>
+                  {aiFields.size > 0 && (
+                    <p style={{ margin: "2px 0 0", fontSize: 10, color: "#2563EB" }}>
+                      {aiFields.size} champ{aiFields.size > 1 ? "s" : ""} pré-rempli{aiFields.size > 1 ? "s" : ""} — vérifiez ci-dessous
+                    </p>
+                  )}
+                </div>
+                <button type="button"
+                  onClick={() => { setFile(null); setPreview(null); setAiFields(new Set()); if (scanFileRef.current) scanFileRef.current.value = ""; if (manualFileRef.current) manualFileRef.current.value = ""; }}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "#8E8E93", flexShrink: 0 }}>
+                  <X size={16} />
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* ── Type ────────────────────────────────────────────────────── */}
+          <div>
+            <label style={lbl}>
+              Type de dépense *
+              {aiFields.has("type") && <span style={{ marginLeft: 6, fontSize: 10, color: "#2563EB", fontWeight: 700 }}>✨ IA</span>}
+            </label>
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
               {TYPES.map((t) => {
                 const { color, bg } = TYPE_COLORS[t];
                 const active = type === t;
+                const isAi = active && aiFields.has("type");
                 return (
                   <button
-                    key={t} type="button" onClick={() => setType(t)}
+                    key={t} type="button" onClick={() => { if (!disabled) setType(t); }}
+                    disabled={disabled}
                     style={{
-                      padding: "11px 14px", borderRadius: 10, textAlign: "left", cursor: "pointer",
-                      border: active ? `2px solid ${color}` : "2px solid rgba(0,0,0,0.08)",
-                      background: active ? bg : "#FAFAFA",
+                      padding: "11px 14px", borderRadius: 10, textAlign: "left", cursor: disabled ? "not-allowed" : "pointer",
+                      border: isAi ? "2px solid #2563EB" : active ? `2px solid ${color}` : "2px solid rgba(0,0,0,0.08)",
+                      background: isAi ? "#EFF6FF" : active ? bg : "#FAFAFA",
                       color: active ? color : "#6E6E73",
                       fontSize: 13, fontWeight: active ? 700 : 400,
                     }}
@@ -239,78 +418,44 @@ function DepenseModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
             </div>
           </div>
 
-          {/* Date + Montant */}
+          {/* ── Date + Montant ───────────────────────────────────────────── */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div>
-              <label style={lbl}>Date *</label>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inp} />
+              <label style={lbl}>
+                Date *
+                {aiFields.has("date") && <span style={{ marginLeft: 6, fontSize: 10, color: "#2563EB", fontWeight: 700 }}>✨ IA</span>}
+              </label>
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+                style={aiInp("date")} disabled={disabled} />
             </div>
             <div>
-              <label style={lbl}>Montant (€) *</label>
+              <label style={lbl}>
+                Montant (€) *
+                {aiFields.has("montant") && <span style={{ marginLeft: 6, fontSize: 10, color: "#2563EB", fontWeight: 700 }}>✨ IA</span>}
+              </label>
               <input type="number" min="0.01" step="0.01" placeholder="0,00" value={montant}
-                onChange={(e) => setMontant(e.target.value)} style={inp} />
+                onChange={(e) => setMontant(e.target.value)} style={aiInp("montant")} disabled={disabled} />
             </div>
           </div>
 
-          {/* Fournisseur */}
+          {/* ── Fournisseur ──────────────────────────────────────────────── */}
           <div>
-            <label style={lbl}>Fournisseur / Magasin *</label>
-            <input type="text" placeholder="ex : Sider, Monsieur Bricolage, SUEZ…" value={fournisseur}
-              onChange={(e) => setFournisseur(e.target.value)} style={inp} />
-          </div>
-
-          {/* Description */}
-          <div>
-            <label style={lbl}>Description</label>
-            <input type="text" placeholder="ex : Joints époxy, pompe de relevage…" value={description}
-              onChange={(e) => setDescription(e.target.value)} style={inp} />
-          </div>
-
-          {/* Photo */}
-          <div>
-            <label style={lbl}>Photo / Justificatif
-              <span style={{ marginLeft: 6, fontWeight: 400, color: "#B45309", fontSize: 11 }}>fortement conseillé</span>
+            <label style={lbl}>
+              Fournisseur / Magasin *
+              {aiFields.has("fournisseur") && <span style={{ marginLeft: 6, fontSize: 10, color: "#2563EB", fontWeight: 700 }}>✨ IA</span>}
             </label>
-            <input
-              ref={fileRef} type="file" accept="image/*,application/pdf"
-              capture="environment" onChange={handleFile}
-              style={{ display: "none" }}
-            />
-            {file ? (
-              <div style={{ marginTop: 8 }}>
-                {preview ? (
-                  <div style={{ position: "relative", display: "inline-block" }}>
-                    <img src={preview} alt="Aperçu"
-                      style={{ width: 130, height: 130, objectFit: "cover", borderRadius: 10, border: "1px solid rgba(0,0,0,0.10)", display: "block" }} />
-                    <button type="button"
-                      onClick={() => { setFile(null); setPreview(null); if (fileRef.current) fileRef.current.value = ""; }}
-                      style={{ position: "absolute", top: -8, right: -8, width: 22, height: 22, borderRadius: "50%", border: "none", background: "#DC2626", color: "#FFF", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <X size={12} />
-                    </button>
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", background: "#F0FDF4", borderRadius: 10, border: "1px solid #BBF7D0" }}>
-                    <span style={{ fontSize: 20 }}>📄</span>
-                    <span style={{ fontSize: 12, color: "#15803D", fontWeight: 600 }}>{file.name}</span>
-                    <button type="button"
-                      onClick={() => { setFile(null); if (fileRef.current) fileRef.current.value = ""; }}
-                      style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "#6E6E73" }}>
-                      <X size={14} />
-                    </button>
-                  </div>
-                )}
-                <button type="button" onClick={() => fileRef.current?.click()}
-                  style={{ marginTop: 6, background: "none", border: "none", color: "#6E6E73", fontSize: 11, cursor: "pointer", padding: 0, textDecoration: "underline" }}>
-                  Changer de fichier
-                </button>
-              </div>
-            ) : (
-              <button type="button" onClick={() => fileRef.current?.click()}
-                style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 10, padding: "16px 16px", width: "100%", borderRadius: 10, border: "2px dashed rgba(0,0,0,0.12)", background: "#FAFAFA", color: "#6E6E73", fontSize: 14, cursor: "pointer", minHeight: 56, boxSizing: "border-box" }}>
-                <Camera size={20} />
-                Photographier ou choisir un fichier
-              </button>
-            )}
+            <input type="text" placeholder="ex : Sider, Monsieur Bricolage, SUEZ…" value={fournisseur}
+              onChange={(e) => setFournisseur(e.target.value)} style={aiInp("fournisseur")} disabled={disabled} />
+          </div>
+
+          {/* ── Description ──────────────────────────────────────────────── */}
+          <div>
+            <label style={lbl}>
+              Description
+              {aiFields.has("description") && <span style={{ marginLeft: 6, fontSize: 10, color: "#2563EB", fontWeight: 700 }}>✨ IA</span>}
+            </label>
+            <input type="text" placeholder="ex : Joints époxy, pompe de relevage…" value={description}
+              onChange={(e) => setDescription(e.target.value)} style={aiInp("description")} disabled={disabled} />
           </div>
 
           {error && (
@@ -324,9 +469,9 @@ function DepenseModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
               style={{ flex: 1, padding: 12, borderRadius: 12, border: "1px solid rgba(0,0,0,0.12)", background: "#F5F5F7", color: "#1D1D1F", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
               Annuler
             </button>
-            <button type="submit" disabled={saving}
-              style={{ flex: 2, padding: 12, borderRadius: 12, border: "none", background: "#2563EB", color: "#FFF", fontSize: 13, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1 }}>
-              {uploading ? "Upload photo…" : saving ? "Enregistrement…" : "Enregistrer"}
+            <button type="submit" disabled={disabled}
+              style={{ flex: 2, padding: 12, borderRadius: 12, border: "none", background: "#2563EB", color: "#FFF", fontSize: 13, fontWeight: 700, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.7 : 1 }}>
+              {scanning ? "Analyse en cours…" : uploading ? "Upload photo…" : saving ? "Enregistrement…" : "Enregistrer"}
             </button>
           </div>
         </form>
