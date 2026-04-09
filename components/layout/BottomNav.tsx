@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Zap, RefreshCw, CheckSquare, MoreHorizontal,
-  Calendar, Wrench, AlertTriangle, Users, FileText, Building2, X,
+  Calendar, Map, Wrench, AlertTriangle, Users, FileText, Building2, X,
   BedDouble, Droplets, Fuel, Receipt,
   type LucideIcon,
 } from "lucide-react";
@@ -20,6 +20,7 @@ const mainTabs: NavTab[] = [
 ];
 
 const moreTabs: NavTab[] = [
+  { href: "/plan",             label: "Plan hôtel",       icon: Map },
   { href: "/chambres",         label: "Chambres",         icon: BedDouble },
   { href: "/piscine",          label: "Registre piscine", icon: Droplets },
   { href: "/fuel",             label: "Suivi Fuel",       icon: Fuel },

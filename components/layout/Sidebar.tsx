@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   LayoutDashboard,
   Calendar,
+  Map,
   Wrench,
   Zap,
   RefreshCw,
@@ -46,6 +47,7 @@ const navSections: NavSection[] = [
     title: "Général",
     items: [
       { href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard },
+      { href: "/plan",      label: "Plan de l'hôtel", icon: Map },
       { href: "/planning",  label: "Planning",        icon: Calendar },
     ],
   },
