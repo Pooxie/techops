@@ -1,358 +1,324 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import {
+  Sunrise, Sunset, ChevronRight, AlertTriangle,
+  CheckCircle, TrendingUp, RefreshCw, Clock,
+  Wrench, Shield, FileDown, Loader2, type LucideIcon,
+} from "lucide-react";
 import Header from "@/components/layout/Header";
-import Badge from "@/components/ui/Badge";
 import {
   fetchDashboardKPIs,
   fetchAlertesPrioritaires,
   fetchAvancementMensuel,
   fetchTopNCParControle,
+  fetchRondesKPI,
+  fetchNCEvolution,
+  fetchRondesToday,
+  fetchNCKPIs,
+  fetchCoutEvolution,
   type DashboardKPIs,
   type AlertePrioritaire,
   type AvancementCategorie,
   type NCParControleItem,
+  type RondesKPI,
+  type NCEvolutionItem,
+  type RondeRecord,
+  type NCKPIs,
+  type CoutEvolutionItem,
 } from "@/lib/supabase";
 
-// ─── SVG pattern pour carte héro ──────────────────────────────────────────────
+// ─── Design tokens ────────────────────────────────────────────────────────────
 
-function HeroPattern() {
+const C = {
+  bg: "#F5F5F7",
+  card: "#FFFFFF",
+  ink: "#111111",
+  mid: "#555555",
+  soft: "#999999",
+  faint: "#E0E0E8",
+  border: "rgba(0,0,0,0.06)",
+  accent: "#2563EB",
+  accentBg: "#EEF4FF",
+  ok: "#1B7F3A",
+  okBg: "#F0FBF3",
+  warn: "#B45309",
+  warnBg: "#FFFBEB",
+  danger: "#C0392B",
+  dangerBg: "#FFF5F5",
+} as const;
+
+const card: React.CSSProperties = {
+  backgroundColor: C.card,
+  borderRadius: 18,
+  padding: "20px 22px",
+  boxShadow: "0 1px 3px rgba(0,0,0,0.07), 0 4px 14px rgba(0,0,0,0.04)",
+  border: `1px solid ${C.border}`,
+  minWidth: 0,
+  overflow: "hidden",
+};
+
+const grid2: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0,1fr))",
+  gap: 12,
+};
+
+const grid3: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(3, minmax(0,1fr))",
+  gap: 12,
+};
+
+// ─── Utils ────────────────────────────────────────────────────────────────────
+
+function useLiveClock() {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
+function fmtTime(iso: string) {
+  return new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+}
+
+function fmtDateShort(iso: string) {
+  return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+}
+
+function statusColor(v: number) { return v >= 80 ? C.ok : v >= 60 ? C.warn : C.danger; }
+function statusBg(v: number) { return v >= 80 ? C.okBg : v >= 60 ? C.warnBg : C.dangerBg; }
+
+// ─── Section header ───────────────────────────────────────────────────────────
+
+function Section({ label }: { label: string }) {
   return (
-    <svg
-      style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0.12 }}
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <defs>
-        <pattern id="circles" x="0" y="0" width="60" height="60" patternUnits="userSpaceOnUse">
-          <circle cx="30" cy="30" r="20" fill="none" stroke="white" strokeWidth="1" />
-          <circle cx="30" cy="30" r="12" fill="none" stroke="white" strokeWidth="0.7" />
-          <circle cx="30" cy="30" r="5"  fill="none" stroke="white" strokeWidth="0.5" />
-        </pattern>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#circles)" />
-    </svg>
+    <p style={{
+      margin: "28px 0 12px",
+      fontSize: 10, fontWeight: 800,
+      color: C.soft,
+      textTransform: "uppercase",
+      letterSpacing: "1.2px",
+    }}>
+      {label}
+    </p>
   );
 }
 
-// ─── Skeletons ─────────────────────────────────────────────────────────────────
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
 
-function KpiSkeleton({ hero = false }: { hero?: boolean }) {
+function Skel({ w, h, r = 8 }: { w: number | string; h: number; r?: number }) {
+  return <div style={{ width: w, height: h, borderRadius: r, backgroundColor: "#F0F0F5", flexShrink: 0 }} />;
+}
+
+// ─── Card title ───────────────────────────────────────────────────────────────
+
+function CardTitle({ icon: Icon, title, href }: { icon: LucideIcon; title: string; href?: string }) {
   return (
-    <div
-      style={{
-        backgroundColor: hero ? "#2563EB" : "#FFFFFF",
-        borderRadius: 16,
-        padding: hero ? 24 : 20,
-        boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-        border: "1px solid rgba(0,0,0,0.05)",
-        minHeight: hero ? 128 : 100,
-      }}
-    >
-      <div style={{ height: 10, width: 80, borderRadius: 5, backgroundColor: hero ? "rgba(255,255,255,0.2)" : "#F5F5F7", marginBottom: 14 }} />
-      <div style={{ height: hero ? 40 : 32, width: 70, borderRadius: 8, backgroundColor: hero ? "rgba(255,255,255,0.2)" : "#F5F5F7" }} />
-    </div>
-  );
-}
-
-function RowSkeleton({ count = 3 }: { count?: number }) {
-  return (
-    <>
-      {Array.from({ length: count }).map((_, i) => (
-        <div
-          key={i}
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            padding: "12px 0",
-            borderBottom: i < count - 1 ? "1px solid rgba(0,0,0,0.05)" : "none",
-          }}
-        >
-          <div style={{ height: 13, width: 160, borderRadius: 6, backgroundColor: "#F5F5F7" }} />
-          <div style={{ height: 22, width: 64, borderRadius: 20, backgroundColor: "#F5F5F7" }} />
-        </div>
-      ))}
-    </>
-  );
-}
-
-// ─── Helpers ───────────────────────────────────────────────────────────────────
-
-function formatDate(iso: string) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
-}
-
-function progressColor(pct: number) {
-  if (pct >= 80) return "#34C759";
-  if (pct >= 60) return "#FF9500";
-  return "#FF3B30";
-}
-
-function conformiteLabel(v: number) {
-  if (v >= 80) return "Conforme";
-  if (v >= 60) return "À surveiller";
-  return "Critique";
-}
-
-// ─── Carte héro (conformité) ───────────────────────────────────────────────────
-
-function HeroCard({ value }: { value: number }) {
-  const color = progressColor(value);
-  return (
-    <div
-      className="hero-card"
-      style={{
-        background: "linear-gradient(135deg, #2563EB, #1D4ED8)",
-        borderRadius: 16,
-        padding: "24px 28px",
-        position: "relative",
-        overflow: "hidden",
-        boxShadow: "0 8px 24px rgba(37,99,235,0.30)",
-        minHeight: 128,
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-      }}
-    >
-      <HeroPattern />
-      <div style={{ position: "relative" }}>
-        <p
-          style={{
-            fontSize: 10,
-            fontWeight: 700,
-            letterSpacing: "1px",
-            textTransform: "uppercase",
-            color: "rgba(255,255,255,0.65)",
-            margin: "0 0 10px",
-          }}
-        >
-          Conformité globale
-        </p>
-        <div style={{ display: "flex", alignItems: "flex-end", gap: 12 }}>
-          <span
-            className="hero-value"
-            style={{
-              fontSize: 52,
-              fontWeight: 700,
-              color: "#FFFFFF",
-              lineHeight: 1,
-              fontVariantNumeric: "tabular-nums",
-              letterSpacing: "-1px",
-            }}
-          >
-            {value}%
-          </span>
-          <span
-            style={{
-              fontSize: 12,
-              fontWeight: 600,
-              color: "rgba(255,255,255,0.70)",
-              paddingBottom: 8,
-            }}
-          >
-            {conformiteLabel(value)}
-          </span>
-        </div>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+        <Icon size={13} color={C.soft} strokeWidth={2} />
+        <span style={{ fontSize: 12, fontWeight: 700, color: C.mid, textTransform: "uppercase", letterSpacing: "0.5px" }}>{title}</span>
       </div>
-      {/* Barre de progression */}
-      <div style={{ position: "relative", marginTop: 16 }}>
-        <div
-          style={{
-            height: 4,
-            borderRadius: 99,
-            backgroundColor: "rgba(255,255,255,0.20)",
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              height: "100%",
-              width: `${value}%`,
-              borderRadius: 99,
-              backgroundColor: color === "#34C759" ? "#A7F3D0" : color === "#FF9500" ? "#FED7AA" : "#FCA5A5",
-              transition: "width 0.8s ease",
-            }}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Carte KPI standard ────────────────────────────────────────────────────────
-
-function KpiCard({
-  label,
-  value,
-  subtext,
-  color,
-}: {
-  label: string;
-  value: string;
-  subtext?: string;
-  color: string;
-}) {
-  return (
-    <div
-      style={{
-        backgroundColor: "#FFFFFF",
-        borderRadius: 16,
-        padding: "18px 20px",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-        border: "1px solid rgba(0,0,0,0.05)",
-        display: "flex",
-        flexDirection: "column",
-        gap: 6,
-      }}
-    >
-      <p
-        style={{
-          fontSize: 10,
-          fontWeight: 700,
-          letterSpacing: "0.8px",
-          textTransform: "uppercase",
-          color: "#AEAEB2",
-          margin: 0,
-        }}
-      >
-        {label}
-      </p>
-      <p
-        className="kpi-value"
-        style={{
-          fontSize: 36,
-          fontWeight: 700,
-          color,
-          margin: 0,
-          lineHeight: 1,
-          fontVariantNumeric: "tabular-nums",
-          letterSpacing: "-0.5px",
-        }}
-      >
-        {value}
-      </p>
-      {subtext && (
-        <p style={{ fontSize: 11, color: "#AEAEB2", margin: 0 }}>{subtext}</p>
+      {href && (
+        <Link href={href} style={{ display: "flex", alignItems: "center", gap: 2, fontSize: 11, fontWeight: 600, color: C.accent, textDecoration: "none" }}>
+          Voir <ChevronRight size={11} />
+        </Link>
       )}
     </div>
   );
+}
+
+// ─── Big KPI card ─────────────────────────────────────────────────────────────
+
+function KpiCard({
+  label, value, sub, color, bg, href,
+}: {
+  label: string; value: string | number; sub?: string;
+  color: string; bg: string; href?: string;
+}) {
+  const inner = (
+    <>
+      <p style={{ margin: "0 0 10px", fontSize: 10, fontWeight: 700, color: C.soft, textTransform: "uppercase", letterSpacing: "0.8px" }}>
+        {label}
+      </p>
+      <p style={{ margin: 0, fontSize: 42, fontWeight: 800, color, lineHeight: 1, letterSpacing: "-1.5px", fontVariantNumeric: "tabular-nums" }}>
+        {value}
+      </p>
+      {sub && <p style={{ margin: "8px 0 0", fontSize: 12, color: C.soft }}>{sub}</p>}
+    </>
+  );
+
+  if (href) {
+    return (
+      <Link href={href} style={{ ...card, display: "block", textDecoration: "none", backgroundColor: bg, borderColor: `${color}22` }}>
+        {inner}
+      </Link>
+    );
+  }
+  return <div style={{ ...card, backgroundColor: bg, borderColor: `${color}22` }}>{inner}</div>;
 }
 
 // ─── Donut SVG ────────────────────────────────────────────────────────────────
 
-function DonutChart({
-  segments,
-  size = 120,
-  label,
-  sublabel,
-}: {
-  segments: { value: number; color: string }[];
-  size?: number;
-  label?: string;
-  sublabel?: string;
+function Donut({ value, total, color, size = 88, sw = 11 }: {
+  value: number; total: number; color: string; size?: number; sw?: number;
 }) {
-  const total = segments.reduce((s, seg) => s + seg.value, 0);
-  if (total === 0) return (
-    <div style={{ width: size, height: size, borderRadius: "50%", backgroundColor: "#F5F5F7", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <span style={{ fontSize: 12, color: "#AEAEB2" }}>—</span>
-    </div>
-  );
-
-  const r = 44;
+  const r = (size - sw) / 2;
   const cx = size / 2;
   const cy = size / 2;
-  const strokeW = 16;
-  const circumference = 2 * Math.PI * r;
-
-  let offset = 0;
-  const arcs = segments.map(seg => {
-    const pct = seg.value / total;
-    const dash = pct * circumference;
-    const arc = { dash, offset: circumference - offset, color: seg.color };
-    offset += dash;
-    return arc;
-  });
+  const circ = 2 * Math.PI * r;
+  const pct = total > 0 ? value / total : 0;
 
   return (
     <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
       <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#F5F5F7" strokeWidth={strokeW} />
-        {arcs.map((arc, i) => (
-          <circle key={i} cx={cx} cy={cy} r={r} fill="none"
-            stroke={arc.color} strokeWidth={strokeW}
-            strokeDasharray={`${arc.dash} ${circumference}`}
-            strokeDashoffset={arc.offset}
-            style={{ transition: "stroke-dasharray 0.6s ease" }}
-          />
-        ))}
-      </svg>
-      {(label !== undefined) && (
-        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-          <span style={{ fontSize: 20, fontWeight: 700, color: "#1D1D1F", lineHeight: 1 }}>{label}</span>
-          {sublabel && <span style={{ fontSize: 10, color: "#AEAEB2", marginTop: 2 }}>{sublabel}</span>}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Barre empilée horizontale ─────────────────────────────────────────────────
-
-function StackedBar({ segments, height = 10 }: { segments: { value: number; color: string; label: string }[]; height?: number }) {
-  const total = segments.reduce((s, seg) => s + seg.value, 0);
-  if (total === 0) return null;
-  return (
-    <div style={{ display: "flex", borderRadius: 99, overflow: "hidden", height }}>
-      {segments.filter(s => s.value > 0).map((seg, i) => (
-        <div
-          key={i}
-          title={`${seg.label} : ${seg.value}`}
-          style={{ width: `${(seg.value / total) * 100}%`, backgroundColor: seg.color, transition: "width 0.6s ease" }}
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#F0F0F5" strokeWidth={sw} />
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={sw}
+          strokeLinecap="round"
+          strokeDasharray={`${pct * circ} ${circ}`}
+          style={{ transition: "stroke-dasharray .9s cubic-bezier(.34,1.56,.64,1)" }}
         />
-      ))}
+      </svg>
+      <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+        <span style={{ fontSize: Math.round(size * 0.21), fontWeight: 800, color, lineHeight: 1 }}>
+          {Math.round(pct * 100)}%
+        </span>
+      </div>
     </div>
   );
 }
 
-// ─── Barres horizontales (top NC) ─────────────────────────────────────────────
+// ─── Progress bar ─────────────────────────────────────────────────────────────
 
-function HBarChart({ items }: { items: NCParControleItem[] }) {
-  const max = Math.max(...items.map(i => i.count), 1);
+function ProgressBar({ value, color, height = 5 }: { value: number; color: string; height?: number }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {items.map(item => (
+    <div style={{ height, backgroundColor: "#F0F0F5", borderRadius: 99, overflow: "hidden" }}>
+      <div style={{ height: "100%", width: `${Math.min(value, 100)}%`, backgroundColor: color, borderRadius: 99, transition: "width .7s ease" }} />
+    </div>
+  );
+}
+
+// ─── NC Evolution bars ────────────────────────────────────────────────────────
+
+function EvoBars({ data }: { data: NCEvolutionItem[] }) {
+  const max = Math.max(...data.map((d) => d.total), 1);
+  const H = 64;
+
+  return (
+    <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
+      {data.map((item) => {
+        const h = Math.round((item.total / max) * H);
+        const majH = item.total > 0 ? Math.round((item.majeures / item.total) * h) : 0;
+        const minH = h - majH;
+
+        return (
+          <div key={item.month} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, minWidth: 0 }}>
+            <div style={{ width: "100%", height: H, display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 1 }}>
+              {item.total === 0
+                ? <div style={{ width: "100%", height: 3, borderRadius: 2, backgroundColor: "#F0F0F5" }} />
+                : <>
+                  {majH > 0 && <div style={{ width: "100%", height: majH, borderRadius: minH === 0 ? "4px 4px 2px 2px" : 0, backgroundColor: C.danger, transition: "height .6s ease" }} />}
+                  {minH > 0 && <div style={{ width: "100%", height: minH, borderRadius: majH === 0 ? "4px 4px 2px 2px" : "0 0 2px 2px", backgroundColor: "#FCA5A5", transition: "height .6s ease" }} />}
+                </>}
+            </div>
+            <span style={{ fontSize: 10, color: C.soft, fontWeight: 500 }}>{item.label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Horizontal bars ─────────────────────────────────────────────────────────
+
+function HBars({ items }: { items: NCParControleItem[] }) {
+  const max = Math.max(...items.map((i) => i.count), 1);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
+      {items.map((item) => (
         <div key={item.nom}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
-            <span style={{ fontSize: 12, color: "#1D1D1F", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0, marginRight: 8 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+            <span style={{ fontSize: 12, color: C.mid, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginRight: 8 }}>
               {item.nom}
             </span>
-            <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
               {item.majeures > 0 && (
-                <span style={{ fontSize: 10, fontWeight: 700, color: "#FF3B30", backgroundColor: "#FF3B3012", padding: "1px 5px", borderRadius: 6 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: C.danger, backgroundColor: C.dangerBg, padding: "2px 6px", borderRadius: 5 }}>
                   {item.majeures} maj.
                 </span>
               )}
-              <span style={{ fontSize: 12, fontWeight: 700, color: "#6E6E73" }}>{item.count}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: C.ink }}>{item.count}</span>
             </div>
           </div>
-          <div style={{ height: 6, backgroundColor: "#F5F5F7", borderRadius: 3, overflow: "hidden" }}>
-            <div style={{ height: "100%", width: `${(item.count / max) * 100}%`, backgroundColor: item.majeures > 0 ? "#FF3B30" : "#FF9500", borderRadius: 3, transition: "width 0.6s ease" }} />
-          </div>
+          <ProgressBar value={(item.count / max) * 100} color={item.majeures > 0 ? C.danger : C.warn} />
         </div>
       ))}
     </div>
   );
 }
 
-// ─── Page ──────────────────────────────────────────────────────────────────────
+// ─── Coût bar chart ───────────────────────────────────────────────────────────
+
+function CoutBars({ data, field, color }: { data: CoutEvolutionItem[]; field: "expl" | "iae"; color: string }) {
+  const max = Math.max(...data.map((d) => d[field]), 1);
+  const H = 64;
+
+  const fmtEur = (v: number) =>
+    v === 0 ? "—" : new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(v);
+
+  return (
+    <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
+      {data.map((item) => {
+        const v = item[field];
+        const h = max > 0 ? Math.round((v / max) * H) : 0;
+        return (
+          <div key={item.month} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, minWidth: 0 }}>
+            <div style={{ width: "100%", height: H, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+              {h > 0
+                ? <div title={fmtEur(v)} style={{ width: "100%", height: h, borderRadius: "4px 4px 2px 2px", backgroundColor: color, transition: "height .6s ease", opacity: 0.85 }} />
+                : <div style={{ width: "100%", height: 3, borderRadius: 2, backgroundColor: "#F0F0F5" }} />}
+            </div>
+            <span style={{ fontSize: 10, color: C.soft, fontWeight: 500 }}>{item.label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+  const now = useLiveClock();
+  const [generatingPDF, setGeneratingPDF] = useState(false);
+
+  async function handleRapportPDF() {
+    if (generatingPDF) return;
+    setGeneratingPDF(true);
+    try {
+      const { generateRapportPDF } = await import("@/lib/generatePDF");
+      await generateRapportPDF();
+    } catch (err) {
+      console.error("Erreur génération PDF:", err);
+    } finally {
+      setGeneratingPDF(false);
+    }
+  }
+
   const [kpis, setKpis] = useState<DashboardKPIs | null>(null);
   const [alertes, setAlertes] = useState<AlertePrioritaire[] | null>(null);
   const [avancement, setAvancement] = useState<AvancementCategorie[] | null>(null);
   const [topNC, setTopNC] = useState<NCParControleItem[] | null>(null);
+  const [rondesKpi, setRondesKpi] = useState<RondesKPI | null>(null);
+  const [ncEvol, setNcEvol] = useState<NCEvolutionItem[] | null>(null);
+  const [rondes, setRondes] = useState<{ ouverture: RondeRecord | null; fermeture: RondeRecord | null } | null>(null);
+  const [ncKpis, setNcKpis] = useState<NCKPIs | null>(null);
+  const [coutEvol, setCoutEvol] = useState<CoutEvolutionItem[] | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -360,397 +326,433 @@ export default function DashboardPage() {
       fetchAlertesPrioritaires(),
       fetchAvancementMensuel(),
       fetchTopNCParControle(),
-    ]).then(([k, a, av, nc]) => {
-      setKpis(k);
-      setAlertes(a);
-      setAvancement(av);
-      setTopNC(nc);
+      fetchRondesKPI(),
+      fetchNCEvolution(),
+      fetchRondesToday(),
+      fetchNCKPIs(),
+      fetchCoutEvolution(),
+    ]).then(([k, a, av, nc, rk, re, r, nck, ce]) => {
+      setKpis(k); setAlertes(a); setAvancement(av);
+      setTopNC(nc); setRondesKpi(rk); setNcEvol(re); setRondes(r);
+      setNcKpis(nck); setCoutEvol(ce);
     });
   }, []);
 
-  const conformiteColor = (v: number) => v >= 80 ? "#34C759" : v >= 60 ? "#FF9500" : "#FF3B30";
+  const dateStr = now.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+  const timeStr = now.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 
   return (
     <>
       <Header title="Tableau de bord" />
 
-      <div
-        style={{ padding: "24px", display: "flex", flexDirection: "column", gap: 20 }}
-        className="max-md:px-4"
-      >
-        {/* Titre */}
-        <div>
-          <h1
-            className="page-title"
-            style={{
-              fontFamily: "var(--font-inter, system-ui)",
-              fontSize: 28,
-              fontWeight: 700,
-              color: "#1D1D1F",
-              margin: 0,
-              lineHeight: 1.2,
-              letterSpacing: "-0.5px",
-            }}
-          >
-            Vue d&apos;ensemble
-          </h1>
-          <p style={{ fontSize: 14, color: "#6E6E73", margin: "4px 0 0" }}>
-            Sofitel Golfe d&apos;Ajaccio
-          </p>
+      <div style={{ backgroundColor: C.bg, minHeight: "100%", padding: "24px 24px 48px", boxSizing: "border-box" }}>
+
+        {/* ── Greeting ── */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4, flexWrap: "wrap", gap: 8 }}>
+          <div>
+            <p style={{ margin: 0, fontSize: 22, fontWeight: 800, color: C.ink, letterSpacing: "-0.4px" }}>
+              Sofitel Golfe d&apos;Ajaccio
+            </p>
+            <p style={{ margin: "2px 0 0", fontSize: 13, color: C.soft, textTransform: "capitalize" }}>{dateStr}</p>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            <button
+              onClick={handleRapportPDF}
+              disabled={generatingPDF}
+              style={{
+                display: "flex", alignItems: "center", gap: 6,
+                height: 34, padding: "0 14px", borderRadius: 10,
+                border: "1px solid rgba(0,0,0,0.12)",
+                backgroundColor: C.card,
+                color: generatingPDF ? C.soft : C.ink,
+                fontSize: 13, fontWeight: 600, cursor: generatingPDF ? "not-allowed" : "pointer",
+                boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+                opacity: generatingPDF ? 0.7 : 1,
+              }}
+            >
+              {generatingPDF
+                ? <Loader2 size={14} color={C.soft} className="animate-spin" />
+                : <FileDown size={14} color={C.accent} />}
+              <span>{generatingPDF ? "Génération en cours…" : "Rapport mensuel"}</span>
+            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, backgroundColor: C.card, borderRadius: 10, padding: "7px 12px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+              <Clock size={12} color={C.soft} />
+              <span style={{ fontSize: 13, fontWeight: 700, color: C.ink, fontVariantNumeric: "tabular-nums" }}>{timeStr}</span>
+            </div>
+          </div>
         </div>
 
-        {/* ── KPI grid ── */}
-        <div
-          className="kpi-grid"
-          style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 14 }}
-        >
-          {/* Carte héro — conformité (full-width sur mobile) */}
-          <div className="kpi-hero">
-            {kpis === null ? (
-              <KpiSkeleton hero />
+        {/* ════════════════════════════════════════
+            SECTION 1 — VUE D'ENSEMBLE
+        ════════════════════════════════════════ */}
+        <Section label="Vue d'ensemble" />
+
+        {/* Conformité pleine largeur */}
+        <div style={{ ...card, marginBottom: 12, display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap" }}>
+          {kpis === null ? (
+            <div style={{ display: "flex", gap: 20, alignItems: "center", width: "100%" }}>
+              <Skel w={88} h={88} r={44} />
+              <div style={{ flex: 1 }}><Skel w="40%" h={12} /><div style={{ marginTop: 10 }}><Skel w="30%" h={44} r={8} /></div></div>
+            </div>
+          ) : (
+            <>
+              <Donut value={kpis.controlesOk} total={kpis.totalControles} color={statusColor(kpis.scoreConformite)} size={88} sw={11} />
+              <div style={{ flex: 1, minWidth: 160 }}>
+                <p style={{ margin: "0 0 4px", fontSize: 10, fontWeight: 700, color: C.soft, textTransform: "uppercase", letterSpacing: "0.8px" }}>
+                  Conformité globale SET
+                </p>
+                <p style={{ margin: 0, fontSize: 44, fontWeight: 800, color: statusColor(kpis.scoreConformite), lineHeight: 1, letterSpacing: "-1.5px" }}>
+                  {kpis.scoreConformite}%
+                </p>
+                <p style={{ margin: "5px 0 0", fontSize: 12, color: C.soft }}>
+                  {kpis.controlesOk} contrôles à jour sur {kpis.totalControles}
+                </p>
+              </div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {[
+                  { label: "À jour", v: kpis.controlesOk, color: C.ok, bg: C.okBg },
+                  { label: "Alerte", v: kpis.controlesAlerte, color: C.warn, bg: C.warnBg },
+                  { label: "Retard", v: kpis.equipementsCritiques, color: C.danger, bg: C.dangerBg },
+                ].map(({ label, v, color, bg }) => (
+                  <div key={label} style={{ backgroundColor: bg, borderRadius: 12, padding: "10px 16px", textAlign: "center", minWidth: 70 }}>
+                    <p style={{ margin: 0, fontSize: 22, fontWeight: 800, color, lineHeight: 1 }}>{v}</p>
+                    <p style={{ margin: "4px 0 0", fontSize: 10, fontWeight: 600, color, textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</p>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* 3 KPI cards */}
+        <div style={grid3}>
+          {kpis === null ? Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} style={card}><Skel w="50%" h={10} /><div style={{ marginTop: 12 }}><Skel w="40%" h={36} r={6} /></div></div>
+          )) : <>
+            <KpiCard label="NC ouvertes" value={kpis.ncOuvertes} href="/non-conformites"
+              sub={kpis.ncOuvertes === 0 ? "Aucune NC active" : `dont ${kpis.nonConformitesMajeures} majeure${kpis.nonConformitesMajeures > 1 ? "s" : ""}`}
+              color={kpis.ncOuvertes === 0 ? C.ok : kpis.nonConformitesMajeures > 0 ? C.danger : C.warn}
+              bg={kpis.ncOuvertes === 0 ? C.okBg : kpis.nonConformitesMajeures > 0 ? C.dangerBg : C.warnBg}
+            />
+            <KpiCard label="Retards contrôles" value={kpis.equipementsCritiques} href="/set"
+              sub={kpis.equipementsCritiques === 0 ? "Tout est à jour" : `${kpis.controlesAlerte} en alerte`}
+              color={kpis.equipementsCritiques === 0 ? C.ok : C.danger}
+              bg={kpis.equipementsCritiques === 0 ? C.okBg : C.dangerBg}
+            />
+            <KpiCard label="Prestataires — semaine" value={kpis.prestatairesCetteSemaine}
+              sub="Visites programmées"
+              color={C.accent}
+              bg={C.accentBg}
+            />
+          </>}
+        </div>
+
+        {/* ════════════════════════════════════════
+            SECTION 2 — RONDES
+        ════════════════════════════════════════ */}
+        <Section label="Rondes" />
+
+        <div style={grid2}>
+          {/* Rondes du jour */}
+          <div style={card}>
+            <CardTitle icon={RefreshCw} title="Rondes du jour" href="/rondes" />
+
+            {rondes === null ? (
+              <div style={grid2}><Skel w="100%" h={72} r={12} /><Skel w="100%" h={72} r={12} /></div>
             ) : (
-              <HeroCard value={kpis.scoreConformite} />
+              <div style={grid2}>
+                {(["ouverture", "fermeture"] as const).map((type) => {
+                  const r = rondes[type];
+                  const col = r ? (r.hors_norme ? C.warn : C.ok) : C.soft;
+                  const bg = r ? (r.hors_norme ? C.warnBg : C.okBg) : "#F9F9FB";
+                  return (
+                    <div key={type} style={{ backgroundColor: bg, borderRadius: 12, padding: "14px", border: `1px solid ${col}25` }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                        {type === "ouverture"
+                          ? <Sunrise size={13} color={col} strokeWidth={2} />
+                          : <Sunset size={13} color={col} strokeWidth={2} />}
+                        <span style={{ fontSize: 11, fontWeight: 700, color: col, textTransform: "capitalize" }}>{type}</span>
+                      </div>
+                      {r ? (
+                        <>
+                          <p style={{ margin: 0, fontSize: 20, fontWeight: 800, color: C.ink, letterSpacing: "-0.5px" }}>{fmtTime(r.date_heure)}</p>
+                          <p style={{ margin: "3px 0 0", fontSize: 11, color: C.soft }}>{r.technicien_prenom}</p>
+                        </>
+                      ) : (
+                        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: C.faint }}>À effectuer</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
 
-          {/* Équipements en retard */}
-          {kpis === null ? (
-            <KpiSkeleton />
-          ) : (
-            <KpiCard
-              label="Équip. en retard"
-              value={`${kpis.equipementsCritiques}`}
-              subtext={kpis.equipementsCritiques === 0 ? "Tout est à jour ✓" : "Nécessite attention"}
-              color={kpis.equipementsCritiques === 0 ? "#34C759" : "#FF3B30"}
-            />
-          )}
-
-          {/* Non-conformités */}
-          {kpis === null ? (
-            <KpiSkeleton />
-          ) : (
-            <KpiCard
-              label="NC ouvertes"
-              value={`${kpis.ncOuvertes}`}
-              subtext={kpis.ncOuvertes === 0 ? "RAS ✓" : `dont ${kpis.nonConformitesMajeures} majeure${kpis.nonConformitesMajeures > 1 ? "s" : ""}`}
-              color={kpis.ncOuvertes === 0 ? "#34C759" : kpis.nonConformitesMajeures > 0 ? "#FF3B30" : "#FF9500"}
-            />
-          )}
-        </div>
-
-        {/* Prestataires cette semaine — petite card */}
-        {kpis !== null && (
-          <div
-            style={{
-              backgroundColor: "#EFF6FF",
-              borderRadius: 12,
-              padding: "12px 18px",
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              border: "1px solid rgba(37,99,235,0.12)",
-            }}
-          >
-            <div
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: 10,
-                background: "linear-gradient(135deg, #2563EB, #1D4ED8)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-                fontSize: 16,
-                fontWeight: 700,
-                color: "#FFFFFF",
-              }}
-            >
-              {kpis.prestatairesCetteSemaine}
-            </div>
-            <div>
-              <p style={{ fontSize: 13, fontWeight: 600, color: "#2563EB", margin: 0 }}>
-                {kpis.prestatairesCetteSemaine === 0
-                  ? "Aucune visite prestataire cette semaine"
-                  : `${kpis.prestatairesCetteSemaine} visite${kpis.prestatairesCetteSemaine > 1 ? "s" : ""} prestataire cette semaine`}
-              </p>
-              <p style={{ fontSize: 11, color: "#6E6E73", margin: "2px 0 0" }}>
-                Semaine en cours
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* ── Santé SET + NC charts ── */}
-        <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
-
-          {/* Santé des contrôles SET */}
-          <div style={{ backgroundColor: "#FFFFFF", borderRadius: 16, padding: 20, boxShadow: "0 2px 8px rgba(0,0,0,0.06)", border: "1px solid rgba(0,0,0,0.05)" }}>
-            <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1D1D1F", margin: "0 0 16px", letterSpacing: "-0.2px" }}>
-              Santé des contrôles SET
-            </h2>
-            {kpis === null ? <RowSkeleton count={3} /> : (
+          {/* Stats rondes mois */}
+          <div style={card}>
+            <CardTitle icon={RefreshCw} title="Rondes — ce mois" href="/rondes" />
+            {rondesKpi === null ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <Skel w="100%" h={50} r={10} />
+                <Skel w="100%" h={50} r={10} />
+              </div>
+            ) : (
               <>
-                <StackedBar segments={[
-                  { value: kpis.controlesOk, color: "#34C759", label: "À jour" },
-                  { value: kpis.controlesAlerte, color: "#FF9500", label: "Alerte" },
-                  { value: kpis.equipementsCritiques, color: "#FF3B30", label: "En retard" },
-                ]} height={12} />
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 14 }}>
+                <div style={grid2}>
                   {[
-                    { label: "À jour", value: kpis.controlesOk, color: "#34C759", pct: Math.round((kpis.controlesOk / Math.max(kpis.totalControles, 1)) * 100) },
-                    { label: "Alerte", value: kpis.controlesAlerte, color: "#FF9500", pct: Math.round((kpis.controlesAlerte / Math.max(kpis.totalControles, 1)) * 100) },
-                    { label: "En retard", value: kpis.equipementsCritiques, color: "#FF3B30", pct: Math.round((kpis.equipementsCritiques / Math.max(kpis.totalControles, 1)) * 100) },
-                  ].map(({ label, value, color, pct }) => (
-                    <div key={label} style={{ padding: "10px 12px", backgroundColor: color + "10", borderRadius: 10, border: `1px solid ${color}22` }}>
-                      <p style={{ fontSize: 10, fontWeight: 700, color, textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 4px" }}>{label}</p>
-                      <p style={{ fontSize: 22, fontWeight: 700, color, margin: 0, lineHeight: 1 }}>{value}</p>
-                      <p style={{ fontSize: 11, color, opacity: 0.7, margin: "2px 0 0" }}>{pct}%</p>
+                    { label: "Rondes effectuées", v: rondesKpi.rondesMois, color: C.accent, bg: C.accentBg },
+                    { label: "Anomalies détectées", v: rondesKpi.anomaliesMois, color: rondesKpi.anomaliesMois > 0 ? C.warn : C.ok, bg: rondesKpi.anomaliesMois > 0 ? C.warnBg : C.okBg },
+                  ].map(({ label, v, color, bg }) => (
+                    <div key={label} style={{ backgroundColor: bg, borderRadius: 12, padding: "14px" }}>
+                      <p style={{ margin: "0 0 6px", fontSize: 10, fontWeight: 700, color, textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</p>
+                      <p style={{ margin: 0, fontSize: 28, fontWeight: 800, color, lineHeight: 1 }}>{v}</p>
                     </div>
                   ))}
                 </div>
-                <p style={{ fontSize: 11, color: "#AEAEB2", margin: "12px 0 0", textAlign: "right" }}>
-                  {kpis.totalControles} contrôles au total
+                {rondesKpi.derniereAnomalie && (
+                  <p style={{ margin: "12px 0 0", fontSize: 12, color: C.soft }}>
+                    Dernière anomalie : <strong style={{ color: C.danger }}>{fmtDateShort(rondesKpi.derniereAnomalie)}</strong>
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* ════════════════════════════════════════
+            SECTION 3 — CONTRÔLES SET
+        ════════════════════════════════════════ */}
+        <Section label="Contrôles SET" />
+
+        {/* Alertes + Avancement */}
+        <div style={{ ...grid2, marginBottom: 12 }}>
+
+          {/* Alertes prioritaires */}
+          <div style={card}>
+            <CardTitle icon={AlertTriangle} title="Alertes prioritaires" href="/set" />
+            {alertes === null ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {Array.from({ length: 4 }).map((_, i) => <Skel key={i} w="100%" h={46} r={10} />)}
+              </div>
+            ) : alertes.length === 0 ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px", borderRadius: 12, backgroundColor: C.okBg }}>
+                <CheckCircle size={14} color={C.ok} />
+                <span style={{ fontSize: 13, fontWeight: 600, color: C.ok }}>Tout est à jour — aucune alerte</span>
+              </div>
+            ) : (
+              <div>
+                {alertes.map((al, i) => {
+                  const isR = al.statut === "retard";
+                  return (
+                    <div key={al.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: i < alertes.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                      <div style={{ width: 7, height: 7, borderRadius: "50%", backgroundColor: isR ? C.danger : C.warn, flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ margin: 0, fontSize: 12, fontWeight: 500, color: C.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{al.nom}</p>
+                        {al.categorie && <p style={{ margin: "1px 0 0", fontSize: 11, color: C.soft }}>{al.categorie}</p>}
+                      </div>
+                      <div style={{ flexShrink: 0, textAlign: "right" }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: isR ? C.danger : C.warn, backgroundColor: isR ? C.dangerBg : C.warnBg, padding: "2px 7px", borderRadius: 20 }}>
+                          {isR ? "Retard" : "Urgent"}
+                        </span>
+                        <p style={{ margin: "2px 0 0", fontSize: 11, color: C.soft }}>{fmtDateShort(al.date_prochaine)}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Avancement par catégorie */}
+          <div style={card}>
+            <CardTitle icon={Shield} title="Avancement par catégorie" href="/set" />
+            {avancement === null ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {Array.from({ length: 4 }).map((_, i) => <Skel key={i} w="100%" h={38} />)}
+              </div>
+            ) : avancement.length === 0 ? (
+              <p style={{ fontSize: 13, color: C.soft, margin: 0 }}>Aucune donnée</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {avancement.map((cat) => {
+                  const c = statusColor(cat.pct);
+                  return (
+                    <div key={cat.categorie}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
+                        <span style={{ fontSize: 12, color: C.mid, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginRight: 8 }}>
+                          {cat.categorie}
+                        </span>
+                        <span style={{ fontSize: 12, fontWeight: 800, color: c, flexShrink: 0 }}>{cat.pct}%</span>
+                      </div>
+                      <ProgressBar value={cat.pct} color={c} />
+                      <p style={{ margin: "3px 0 0", fontSize: 10, color: C.soft }}>{cat.ok}/{cat.total} OK</p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ════════════════════════════════════════
+            SECTION 4 — COÛTS NC (EXPL / IAE)
+        ════════════════════════════════════════ */}
+        <Section label="Coûts des non-conformités" />
+
+        <div style={grid2}>
+
+          {/* EXPL */}
+          <div style={card}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
+              <div>
+                <p style={{ margin: "0 0 4px", fontSize: 10, fontWeight: 700, color: C.soft, textTransform: "uppercase", letterSpacing: "0.8px" }}>
+                  Coût Exploitation (EXPL)
                 </p>
+                <p style={{ margin: 0, fontSize: 32, fontWeight: 800, color: C.warn, lineHeight: 1, letterSpacing: "-1px" }}>
+                  {ncKpis === null
+                    ? "—"
+                    : ncKpis.coutExpl === 0
+                      ? "0 €"
+                      : new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(ncKpis.coutExpl)}
+                </p>
+                <p style={{ margin: "5px 0 0", fontSize: 11, color: C.soft }}>
+                  {ncKpis !== null && ncKpis.coutTotal > 0
+                    ? `${Math.round((ncKpis.coutExpl / ncKpis.coutTotal) * 100)}% du coût total`
+                    : "Impact sur exploitation courante"}
+                </p>
+              </div>
+              <div style={{ backgroundColor: C.warnBg, borderRadius: 10, padding: "6px 10px" }}>
+                <Wrench size={14} color={C.warn} strokeWidth={2} />
+              </div>
+            </div>
+            {coutEvol === null
+              ? <Skel w="100%" h={80} r={8} />
+              : <CoutBars data={coutEvol} field="expl" color={C.warn} />}
+          </div>
+
+          {/* IAE */}
+          <div style={card}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
+              <div>
+                <p style={{ margin: "0 0 4px", fontSize: 10, fontWeight: 700, color: C.soft, textTransform: "uppercase", letterSpacing: "0.8px" }}>
+                  Coût IAE (Investissement)
+                </p>
+                <p style={{ margin: 0, fontSize: 32, fontWeight: 800, color: C.accent, lineHeight: 1, letterSpacing: "-1px" }}>
+                  {ncKpis === null
+                    ? "—"
+                    : ncKpis.coutIae === 0
+                      ? "0 €"
+                      : new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(ncKpis.coutIae)}
+                </p>
+                <p style={{ margin: "5px 0 0", fontSize: 11, color: C.soft }}>
+                  {ncKpis !== null && ncKpis.coutTotal > 0
+                    ? `${Math.round((ncKpis.coutIae / ncKpis.coutTotal) * 100)}% du coût total`
+                    : "Impact sur investissements"}
+                </p>
+              </div>
+              <div style={{ backgroundColor: C.accentBg, borderRadius: 10, padding: "6px 10px" }}>
+                <TrendingUp size={14} color={C.accent} strokeWidth={2} />
+              </div>
+            </div>
+            {coutEvol === null
+              ? <Skel w="100%" h={80} r={8} />
+              : <CoutBars data={coutEvol} field="iae" color={C.accent} />}
+          </div>
+        </div>
+
+        {/* ════════════════════════════════════════
+            SECTION 5 — NON-CONFORMITÉS
+        ════════════════════════════════════════ */}
+        <Section label="Non-Conformités" />
+
+        <div style={{ ...grid2, marginBottom: 12 }}>
+
+          {/* NC répartition */}
+          <div style={card}>
+            <CardTitle icon={AlertTriangle} title="Répartition NC" href="/non-conformites" />
+            {kpis === null ? (
+              <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+                <Skel w={88} h={88} r={44} />
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+                  {Array.from({ length: 3 }).map((_, i) => <Skel key={i} w="100%" h={16} />)}
+                </div>
+              </div>
+            ) : (
+              <>
+                <div style={{ display: "flex", gap: 18, alignItems: "center", marginBottom: 14 }}>
+                  <Donut
+                    value={kpis.ncOuvertes}
+                    total={Math.max(kpis.ncOuvertes + kpis.ncLevees, 1)}
+                    color={kpis.nonConformitesMajeures > 0 ? C.danger : C.warn}
+                    size={88} sw={11}
+                  />
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 9, minWidth: 0 }}>
+                    {[
+                      { label: "Majeures ouvertes", v: kpis.nonConformitesMajeures, c: C.danger },
+                      { label: "Mineures ouvertes", v: kpis.ncMineuresOuvertes, c: C.warn },
+                      { label: "Levées", v: kpis.ncLevees, c: C.ok },
+                    ].map(({ label, v, c }) => (
+                      <div key={label} style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                        <div style={{ width: 7, height: 7, borderRadius: 2, backgroundColor: c, flexShrink: 0 }} />
+                        <span style={{ fontSize: 12, color: C.soft, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+                        <span style={{ fontSize: 13, fontWeight: 800, color: C.ink, flexShrink: 0 }}>{v}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ padding: "10px 12px", backgroundColor: "#F9F9FB", borderRadius: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                    <span style={{ fontSize: 12, color: C.soft }}>Taux de levée</span>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: C.ok }}>
+                      {kpis.ncOuvertes + kpis.ncLevees > 0 ? Math.round((kpis.ncLevees / (kpis.ncOuvertes + kpis.ncLevees)) * 100) : 0}%
+                    </span>
+                  </div>
+                  <ProgressBar value={kpis.ncOuvertes + kpis.ncLevees > 0 ? Math.round((kpis.ncLevees / (kpis.ncOuvertes + kpis.ncLevees)) * 100) : 0} color={C.ok} height={4} />
+                </div>
               </>
             )}
           </div>
 
-          {/* Répartition NC */}
-          <div style={{ backgroundColor: "#FFFFFF", borderRadius: 16, padding: 20, boxShadow: "0 2px 8px rgba(0,0,0,0.06)", border: "1px solid rgba(0,0,0,0.05)" }}>
-            <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1D1D1F", margin: "0 0 16px", letterSpacing: "-0.2px" }}>
-              Répartition des NC
-            </h2>
-            {kpis === null ? <RowSkeleton count={3} /> : (
-              <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
-                <DonutChart
-                  size={120}
-                  label={`${kpis.ncOuvertes + kpis.ncLevees}`}
-                  sublabel="NC total"
-                  segments={[
-                    { value: kpis.nonConformitesMajeures, color: "#FF3B30" },
-                    { value: kpis.ncMineuresOuvertes, color: "#FF9500" },
-                    { value: kpis.ncLevees, color: "#34C759" },
-                  ]}
-                />
-                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
-                  {[
-                    { label: "Majeures ouvertes", value: kpis.nonConformitesMajeures, color: "#FF3B30" },
-                    { label: "Mineures ouvertes", value: kpis.ncMineuresOuvertes, color: "#FF9500" },
-                    { label: "Levées", value: kpis.ncLevees, color: "#34C759" },
-                  ].map(({ label, value, color }) => (
-                    <div key={label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <div style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: color, flexShrink: 0 }} />
-                      <span style={{ fontSize: 12, color: "#6E6E73", flex: 1 }}>{label}</span>
-                      <span style={{ fontSize: 13, fontWeight: 700, color }}>{value}</span>
-                    </div>
-                  ))}
-                  <div style={{ marginTop: 4, paddingTop: 8, borderTop: "1px solid #F5F5F7" }}>
-                    <span style={{ fontSize: 11, color: "#AEAEB2" }}>
-                      Taux de levée : <strong style={{ color: "#34C759" }}>
-                        {kpis.ncOuvertes + kpis.ncLevees > 0 ? Math.round((kpis.ncLevees / (kpis.ncOuvertes + kpis.ncLevees)) * 100) : 0}%
-                      </strong>
-                    </span>
-                  </div>
-                </div>
+          {/* Évolution 6 mois */}
+          <div style={card}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                <TrendingUp size={13} color={C.soft} strokeWidth={2} />
+                <span style={{ fontSize: 12, fontWeight: 700, color: C.mid, textTransform: "uppercase", letterSpacing: "0.5px" }}>Évolution — 6 mois</span>
               </div>
-            )}
+              <div style={{ display: "flex", gap: 10 }}>
+                {[{ c: C.danger, l: "Maj." }, { c: "#FCA5A5", l: "Min." }].map(({ c, l }) => (
+                  <div key={l} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <div style={{ width: 7, height: 7, borderRadius: 2, backgroundColor: c }} />
+                    <span style={{ fontSize: 10, color: C.soft }}>{l}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {ncEvol === null
+              ? <Skel w="100%" h={80} r={8} />
+              : <EvoBars data={ncEvol} />}
           </div>
         </div>
 
-        {/* ── Top NC par contrôle ── */}
-        <div style={{ backgroundColor: "#FFFFFF", borderRadius: 16, padding: 20, boxShadow: "0 2px 8px rgba(0,0,0,0.06)", border: "1px solid rgba(0,0,0,0.05)" }}>
-          <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1D1D1F", margin: "0 0 16px", letterSpacing: "-0.2px" }}>
-            Contrôles avec le plus de NC ouvertes
-          </h2>
-          {topNC === null ? <RowSkeleton count={5} /> : topNC.length === 0 ? (
-            <p style={{ fontSize: 13, color: "#AEAEB2", margin: 0 }}>Aucune NC ouverte</p>
+        {/* Top NC */}
+        <div style={card}>
+          <CardTitle icon={Wrench} title="Contrôles avec le plus de NC ouvertes" href="/non-conformites" />
+          {topNC === null ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {Array.from({ length: 5 }).map((_, i) => <Skel key={i} w="100%" h={34} />)}
+            </div>
+          ) : topNC.length === 0 ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px", borderRadius: 10, backgroundColor: C.okBg }}>
+              <CheckCircle size={14} color={C.ok} />
+              <span style={{ fontSize: 13, fontWeight: 600, color: C.ok }}>Aucune NC ouverte en ce moment</span>
+            </div>
           ) : (
-            <HBarChart items={topNC} />
+            <HBars items={topNC} />
           )}
         </div>
 
-        {/* ── Ligne alertes + avancement ── */}
-        <div
-          className="grid grid-cols-2 gap-4 max-md:grid-cols-1"
-        >
-          {/* Alertes prioritaires */}
-          <div
-            className="dashboard-card"
-            style={{
-              backgroundColor: "#FFFFFF",
-              borderRadius: 16,
-              padding: 20,
-              boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-              border: "1px solid rgba(0,0,0,0.05)",
-            }}
-          >
-            <h2
-              style={{
-                fontSize: 14,
-                fontWeight: 700,
-                color: "#1D1D1F",
-                margin: "0 0 16px",
-                letterSpacing: "-0.2px",
-              }}
-            >
-              Alertes prioritaires
-            </h2>
-            {alertes === null ? (
-              <RowSkeleton count={3} />
-            ) : alertes.length === 0 ? (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: "12px 14px",
-                  borderRadius: 10,
-                  backgroundColor: "#F0FDF4",
-                }}
-              >
-                <span style={{ fontSize: 16 }}>✓</span>
-                <p style={{ fontSize: 13, color: "#34C759", fontWeight: 600, margin: 0 }}>
-                  Aucune alerte prioritaire
-                </p>
-              </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column" }}>
-                {alertes.map((alerte, i) => (
-                  <div
-                    key={alerte.id}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      padding: "11px 0",
-                      borderBottom:
-                        i < alertes.length - 1 ? "1px solid rgba(0,0,0,0.05)" : "none",
-                      gap: 12,
-                    }}
-                  >
-                    <div style={{ minWidth: 0 }}>
-                      <p
-                        style={{
-                          fontSize: 13,
-                          fontWeight: 500,
-                          color: "#1D1D1F",
-                          margin: 0,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {alerte.nom}
-                      </p>
-                      {alerte.categorie && (
-                        <p style={{ fontSize: 11, color: "#AEAEB2", margin: "2px 0 0" }}>
-                          {alerte.categorie}
-                        </p>
-                      )}
-                    </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "flex-end",
-                        gap: 4,
-                        flexShrink: 0,
-                      }}
-                    >
-                      <Badge variant={alerte.statut === "retard" ? "danger" : "warning"}>
-                        {alerte.statut === "retard" ? "En retard" : "Urgent"}
-                      </Badge>
-                      <span style={{ fontSize: 11, color: "#AEAEB2" }}>
-                        {formatDate(alerte.date_prochaine)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Avancement mensuel */}
-          <div
-            className="dashboard-card"
-            style={{
-              backgroundColor: "#FFFFFF",
-              borderRadius: 16,
-              padding: 20,
-              boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-              border: "1px solid rgba(0,0,0,0.05)",
-            }}
-          >
-            <h2
-              style={{
-                fontSize: 14,
-                fontWeight: 700,
-                color: "#1D1D1F",
-                margin: "0 0 16px",
-                letterSpacing: "-0.2px",
-              }}
-            >
-              Avancement mensuel
-            </h2>
-            {avancement === null ? (
-              <RowSkeleton count={4} />
-            ) : avancement.length === 0 ? (
-              <p style={{ fontSize: 14, color: "#AEAEB2", margin: 0, padding: "12px 0" }}>
-                Aucune donnée disponible
-              </p>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                {avancement.map((cat) => (
-                  <div key={cat.categorie}>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "baseline",
-                        marginBottom: 6,
-                      }}
-                    >
-                      <span style={{ fontSize: 13, fontWeight: 500, color: "#1D1D1F" }}>
-                        {cat.categorie}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 700,
-                          color: progressColor(cat.pct),
-                        }}
-                      >
-                        {cat.pct}%
-                      </span>
-                    </div>
-                    <div
-                      style={{
-                        height: 5,
-                        borderRadius: 99,
-                        backgroundColor: "#F5F5F7",
-                        overflow: "hidden",
-                      }}
-                    >
-                      <div
-                        style={{
-                          height: "100%",
-                          width: `${cat.pct}%`,
-                          borderRadius: 99,
-                          backgroundColor: progressColor(cat.pct),
-                          transition: "width 0.6s ease",
-                        }}
-                      />
-                    </div>
-                    <p style={{ fontSize: 11, color: "#AEAEB2", margin: "4px 0 0" }}>
-                      {cat.ok} / {cat.total} contrôles OK
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
       </div>
     </>
   );

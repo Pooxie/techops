@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
-import { Sunrise, Sunset, ArrowLeft, AlertCircle, CheckCircle } from "lucide-react";
+import { Sunrise, Sunset, ArrowLeft, AlertCircle, CheckCircle, FileDown } from "lucide-react";
 import {
   LineChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, YAxis,
 } from "recharts";
@@ -12,6 +13,16 @@ import {
   fetchRondesHistoriqueWithDonnees,
   type RondeWithDonnees,
 } from "@/lib/supabase";
+import {
+  formatFieldValue,
+  formatThresholdHint,
+  getDetailTrendFields,
+  getFieldStatus,
+  getFieldValue,
+  getVisibleRondeSections,
+  type NumberFieldConfig,
+  type RondeFieldConfig,
+} from "@/lib/rondes";
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
@@ -23,27 +34,43 @@ function formatDateLong(iso: string) {
   });
 }
 
-// ── Sparkline ────────────────────────────────────────────────────────────────
-
 type SparkPoint = { t: string; v: number | null };
 
 function Sparkline({
   title,
   data,
   unit,
-  thresholdMin,
-  thresholdMax,
+  field,
   color,
 }: {
   title: string;
   data: SparkPoint[];
   unit: string;
-  thresholdMin?: number;
-  thresholdMax?: number;
+  field: NumberFieldConfig;
   color: string;
 }) {
   const hasData = data.some((d) => d.v !== null);
   const filled = data.map((d) => ({ t: d.t, v: d.v })).filter((d) => d.v !== null);
+
+  function renderThresholds() {
+    if (!field.threshold) return null;
+    if (field.threshold.kind === "range") {
+      return (
+        <>
+          <ReferenceLine y={field.threshold.min} stroke="#FF3B30" strokeDasharray="3 3" strokeWidth={1} />
+          <ReferenceLine y={field.threshold.max} stroke="#FF3B30" strokeDasharray="3 3" strokeWidth={1} />
+        </>
+      );
+    }
+    return (
+      <ReferenceLine
+        y={field.threshold.value}
+        stroke="#FF3B30"
+        strokeDasharray="3 3"
+        strokeWidth={1}
+      />
+    );
+  }
 
   return (
     <div style={{
@@ -56,6 +83,9 @@ function Sparkline({
       <p style={{ fontSize: 11, color: "#8E8E93", margin: "0 0 6px", fontWeight: 600, letterSpacing: "0.3px" }}>
         {title}
       </p>
+      {formatThresholdHint(field) ? (
+        <p style={{ fontSize: 10, color: "#AEAEB2", margin: "0 0 8px" }}>{formatThresholdHint(field)}</p>
+      ) : null}
       {!hasData ? (
         <div style={{ height: 64, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <span style={{ fontSize: 11, color: "#C7C7CC" }}>Pas de données</span>
@@ -69,12 +99,7 @@ function Sparkline({
               width={36}
               tickCount={3}
             />
-            {thresholdMin !== undefined && (
-              <ReferenceLine y={thresholdMin} stroke="#FF3B30" strokeDasharray="3 3" strokeWidth={1} />
-            )}
-            {thresholdMax !== undefined && (
-              <ReferenceLine y={thresholdMax} stroke="#FF3B30" strokeDasharray="3 3" strokeWidth={1} />
-            )}
+            {renderThresholds()}
             <Tooltip
               contentStyle={{ fontSize: 11, padding: "4px 8px", borderRadius: 8 }}
               formatter={(v) => [`${v}${unit}`, ""]}
@@ -95,40 +120,27 @@ function Sparkline({
   );
 }
 
-// ── Section values ────────────────────────────────────────────────────────────
-
-type OkNok = "ok" | "nok" | null;
-
-function ValueRow({ label, value, unit, min, max }: { label: string; value: number | null; unit?: string; min?: number; max?: number }) {
-  const isOk = value === null ? null : (
-    (min !== undefined && value < min) || (max !== undefined && value > max) ? false : true
-  );
+function ValueRow({ field, ronde }: { field: RondeFieldConfig; ronde: RondeWithDonnees }) {
+  const value = getFieldValue(ronde.donnees, field.path);
+  const status = getFieldStatus(field, ronde.donnees);
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid rgba(0,0,0,0.04)" }}>
-      <span style={{ fontSize: 13, color: "#6E6E73" }}>{label}</span>
+      <div>
+        <span style={{ fontSize: 13, color: "#6E6E73" }}>{field.label}</span>
+        {field.kind === "number" && formatThresholdHint(field) ? (
+          <p style={{ margin: "2px 0 0", fontSize: 10, color: "#AEAEB2" }}>{formatThresholdHint(field)}</p>
+        ) : null}
+      </div>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <span style={{ fontSize: 13, fontWeight: 500, color: isOk === false ? "#FF3B30" : "#1D1D1F" }}>
-          {value !== null ? `${value}${unit ?? ""}` : "—"}
+        <span style={{ fontSize: 13, fontWeight: 500, color: status === "alert" ? "#FF3B30" : "#1D1D1F" }}>
+          {formatFieldValue(field, value)}
         </span>
-        {isOk !== null && (
-          isOk
+        {status !== "empty" && (
+          status === "ok"
             ? <CheckCircle size={13} color="#34C759" />
             : <AlertCircle size={13} color="#FF3B30" />
         )}
       </div>
-    </div>
-  );
-}
-
-function OkNokRow({ label, value }: { label: string; value: OkNok }) {
-  return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid rgba(0,0,0,0.04)" }}>
-      <span style={{ fontSize: 13, color: "#6E6E73" }}>{label}</span>
-      {value === null
-        ? <span style={{ fontSize: 12, color: "#C7C7CC" }}>—</span>
-        : value === "ok"
-          ? <CheckCircle size={14} color="#34C759" />
-          : <AlertCircle size={14} color="#FF3B30" />}
     </div>
   );
 }
@@ -151,6 +163,7 @@ export default function RondeDetailPage() {
   const [ronde, setRonde] = useState<RondeWithDonnees | null>(null);
   const [historique, setHistorique] = useState<RondeWithDonnees[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -185,69 +198,58 @@ export default function RondeDetailPage() {
     );
   }
 
-  const isOuv = ronde.type === "ouverture";
-  const d = ronde.donnees;
-
-  // Sparkline data: last 7 days, all rondes sorted ascending
+  const currentRonde = ronde;
+  const isOuv = currentRonde.type === "ouverture";
   const sorted = [...historique].sort((a, b) => a.date_heure.localeCompare(b.date_heure));
+  const sections = getVisibleRondeSections(currentRonde.type);
 
-  function spark(getter: (r: RondeWithDonnees) => number | null): SparkPoint[] {
+  function spark(field: NumberFieldConfig): SparkPoint[] {
     return sorted.map((r) => ({
       t: r.date_heure.split("T")[0],
-      v: getter(r),
+      v: (getFieldValue(r.donnees, field.path) as number | null) ?? null,
     }));
   }
 
-  const chartData = [
-    {
-      title: "pH Piscine hôtel",
-      data: spark((r) => r.donnees.piscine_thalasso.piscine_hotel.ph),
-      unit: "",
-      thresholdMin: 7.2,
-      thresholdMax: 7.6,
-      color: "#2563EB",
-    },
-    {
-      title: "Chlore Piscine hôtel",
-      data: spark((r) => r.donnees.piscine_thalasso.piscine_hotel.chlore_libre),
-      unit: " mg/L",
-      thresholdMin: 0.4,
-      thresholdMax: 1.4,
-      color: "#5856D6",
-    },
-    {
-      title: "T° Thalasso",
-      data: spark((r) => r.donnees.piscine_thalasso.thalasso.temp_echange),
-      unit: "°C",
-      thresholdMax: 32,
-      color: "#FF9500",
-    },
-    {
-      title: "T° Départ ECS",
-      data: spark((r) => r.donnees.chaufferie_ecs.chaufferie.temp_depart_ecs),
-      unit: "°C",
-      thresholdMin: 55,
-      thresholdMax: 65,
-      color: "#FF3B30",
-    },
-    {
-      title: "T° Ballon ECS",
-      data: spark((r) => r.donnees.chaufferie_ecs.chaufferie.temp_ballon),
-      unit: "°C",
-      thresholdMin: 55,
-      color: "#FF6B00",
-    },
-    {
-      title: "Niveau fuel",
-      data: spark((r) => r.donnees.chaufferie_ecs.dry_cooling.niveau_fuel),
-      unit: "%",
-      color: "#34C759",
-    },
-  ];
+  const trendFields = getDetailTrendFields(currentRonde.type).map((field, index) => ({
+    field,
+    title: field.label,
+    data: spark(field),
+    unit: field.unit ? ` ${field.unit}` : "",
+    color: ["#2563EB", "#5856D6", "#FF9500", "#FF3B30", "#34C759", "#0EA5E9"][index % 6],
+  }));
 
-  const { piscine_hotel: ph, piscine_institut: pi, thalasso: th, surpresseur: sur, baches: bac, filtration_emf: filt } = d.piscine_thalasso;
-  const { chaufferie: ch, recyclage: rec, geg_hotel: geg, dry_cooling: dry, compteurs_pompes_edm: pompes, compteur_emu: emu } = d.chaufferie_ecs;
-  const { reception: recep, cave_economat: cave, compresseur_air: compr, coffret_relevage: crel, coffret_puisard: cpuis } = d.technique_generale;
+  async function handleDownloadPdf() {
+    setExportingPdf(true);
+
+    try {
+      const [{ pdf }, { RondeRecapPdf }, React] = await Promise.all([
+        import("@react-pdf/renderer"),
+        import("@/components/pdf/RondeRecapPdf"),
+        import("react"),
+      ]);
+
+      const element = React.default.createElement(RondeRecapPdf, {
+        type: currentRonde.type,
+        donnees: currentRonde.donnees,
+        observations: currentRonde.observations,
+        signature: currentRonde.signature,
+        generatedAt: currentRonde.date_heure,
+        technicien: currentRonde.technicien_prenom,
+        title: `Récap ronde ${currentRonde.type}`,
+      });
+
+      const blob = await pdf(element).toBlob();
+
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `ronde_${currentRonde.type}_${currentRonde.date_heure.slice(0, 10)}.pdf`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExportingPdf(false);
+    }
+  }
 
   return (
     <div>
@@ -265,6 +267,29 @@ export default function RondeDetailPage() {
         >
           <ArrowLeft size={16} />
           Retour
+        </button>
+
+        <button
+          type="button"
+          onClick={handleDownloadPdf}
+          disabled={exportingPdf}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            marginBottom: 16,
+            padding: "10px 14px",
+            borderRadius: 12,
+            border: "1px solid rgba(37,99,235,0.16)",
+            backgroundColor: "#FFFFFF",
+            color: "#2563EB",
+            fontSize: 14,
+            fontWeight: 700,
+            cursor: exportingPdf ? "not-allowed" : "pointer",
+          }}
+        >
+          <FileDown size={16} />
+          {exportingPdf ? "Génération du PDF..." : "Télécharger le PDF"}
         </button>
 
         {/* Header ronde */}
@@ -304,9 +329,9 @@ export default function RondeDetailPage() {
         <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.7px", textTransform: "uppercase", color: "#AEAEB2", margin: "0 0 12px" }}>
           Tendances 7 jours
         </p>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 28 }}>
-          {chartData.map((chart) => (
-            <Sparkline key={chart.title} {...chart} />
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10, marginBottom: 28 }}>
+          {trendFields.map((chart) => (
+            <Sparkline key={chart.title} title={chart.title} data={chart.data} unit={chart.unit} field={chart.field} color={chart.color} />
           ))}
         </div>
 
@@ -315,122 +340,39 @@ export default function RondeDetailPage() {
           Valeurs relevées
         </p>
 
-        <div style={{ backgroundColor: "#FFFFFF", borderRadius: 16, border: "1px solid rgba(0,0,0,0.06)", padding: "4px 16px 8px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", marginBottom: 14 }}>
-          <SectionTitle title="Piscine hôtel" />
-          <ValueRow label="pH" value={ph.ph} min={7.2} max={7.6} />
-          <ValueRow label="Chlore libre" value={ph.chlore_libre} unit=" mg/L" min={0.4} max={1.4} />
-          <ValueRow label="Température" value={ph.temperature} unit="°C" />
-          <ValueRow label="Hypochlorite" value={ph.niveau_hypochlorite} unit="%" />
-          <ValueRow label="Compteur débit" value={ph.compteur_debit} />
-          <OkNokRow label="Nettoyage filtres" value={ph.nettoyage_filtres} />
-          <OkNokRow label="Contrôle Swan" value={ph.controle_swan} />
-          <OkNokRow label="Débordement" value={ph.debordement} />
+        {sections.map((section) => (
+          <div key={section.id} style={{ backgroundColor: "#FFFFFF", borderRadius: 16, border: "1px solid rgba(0,0,0,0.06)", padding: "4px 16px 8px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", marginBottom: 14 }}>
+            <SectionTitle title={section.title} />
+            {section.fields.map((field) => (
+              <ValueRow key={field.id} field={field} ronde={ronde} />
+            ))}
+          </div>
+        ))}
 
-          <SectionTitle title="Piscine institut" />
-          <ValueRow label="pH" value={pi.ph} min={7.2} max={7.6} />
-          <ValueRow label="Chlore libre" value={pi.chlore_libre} unit=" mg/L" min={0.4} max={1.4} />
-          <ValueRow label="Température" value={pi.temperature} unit="°C" />
-          <OkNokRow label="Gallet pédiluves" value={pi.gallet_pediluves} />
-          <OkNokRow label="Débordement" value={pi.debordement} />
+        {ronde.observations ? (
+          <div style={{ backgroundColor: "#FFFFFF", borderRadius: 16, border: "1px solid rgba(0,0,0,0.06)", padding: "18px 20px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", marginBottom: 14 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.7px", textTransform: "uppercase", color: "#AEAEB2", margin: "0 0 8px" }}>
+              Observations generales
+            </p>
+            <p style={{ margin: 0, fontSize: 14, color: "#1D1D1F", lineHeight: 1.5 }}>{ronde.observations}</p>
+          </div>
+        ) : null}
 
-          <SectionTitle title="Thalasso" />
-          <ValueRow label="T° échange" value={th.temp_echange} unit="°C" max={32} />
-          <ValueRow label="Compteur remplissage" value={th.compteur_remplissage} />
-          <ValueRow label="N° pompe filtration" value={th.num_pompe_filtration} />
-          <ValueRow label="Compteur remplissage EMF" value={th.compteur_remplissage_emf} />
-          <OkNokRow label="Nettoyage filtres" value={th.nettoyage_filtres} />
-          <OkNokRow label="Contrôle Swan" value={th.controle_swan} />
-
-          <SectionTitle title="Surpresseur" />
-          <ValueRow label="P5 eau mer" value={sur.p5_eau_mer} unit=" bar" />
-          <ValueRow label="P7C affusions" value={sur.p7c_affusions} unit=" bar" />
-          <ValueRow label="P7B douches jet" value={sur.p7b_douches_jet} unit=" bar" />
-          <ValueRow label="P7A baignoires" value={sur.p7a_baignoires} unit=" bar" />
-
-          <SectionTitle title="Bâches" />
-          <OkNokRow label="Piscine niveau" value={bac.piscine_niveau} />
-          <OkNokRow label="EMF niveau" value={bac.emf_niveau} />
-          <OkNokRow label="EMC niveau" value={bac.emc_niveau} />
-
-          <SectionTitle title="Filtration EMF" />
-          <ValueRow label="Pression avant filtre" value={filt.pression_av_filtre} unit=" bar" />
-          <ValueRow label="Pression après filtre" value={filt.pression_apres_filtre} unit=" bar" />
-          <OkNokRow label="Contrôle UV" value={filt.controle_uv} />
-          <OkNokRow label="Contrôle Swan" value={filt.controle_swan} />
-
-          {d.piscine_thalasso.observations ? (
-            <div style={{ padding: "8px 0" }}>
-              <p style={{ fontSize: 11, color: "#AEAEB2", margin: "0 0 3px" }}>Observations</p>
-              <p style={{ fontSize: 13, color: "#1D1D1F", margin: 0 }}>{d.piscine_thalasso.observations}</p>
-            </div>
-          ) : null}
-        </div>
-
-        <div style={{ backgroundColor: "#FFFFFF", borderRadius: 16, border: "1px solid rgba(0,0,0,0.06)", padding: "4px 16px 8px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", marginBottom: 14 }}>
-          <SectionTitle title="Chaufferie" />
-          <ValueRow label="Pression primaire" value={ch.pression_primaire} unit=" bar" />
-          <ValueRow label="T° primaire échangeur" value={ch.temp_primaire_echangeur} unit="°C" />
-          <ValueRow label="T° départ ECS" value={ch.temp_depart_ecs} unit="°C" min={55} max={65} />
-          <ValueRow label="T° ballon" value={ch.temp_ballon} unit="°C" min={55} />
-          <OkNokRow label="Pompe bouclage" value={ch.pompe_bouclage} />
-
-          <SectionTitle title="Recyclage" />
-          <ValueRow label="T° S3" value={rec.temp_s3} unit="°C" />
-          <ValueRow label="T° S4" value={rec.temp_s4} unit="°C" />
-          <ValueRow label="T° S5" value={rec.temp_s5} unit="°C" />
-
-          <SectionTitle title="GEG hôtel" />
-          <ValueRow label="Pression" value={geg.pression} unit=" bar" />
-          <ValueRow label="Température" value={geg.temperature} unit="°C" />
-
-          <SectionTitle title="Dry cooling" />
-          <ValueRow label="Niveau fuel" value={dry.niveau_fuel} unit="%" />
-          <OkNokRow label="Pression circuit" value={dry.pression_circuit} />
-
-          <SectionTitle title="Compteurs pompes EDM" />
-          <ValueRow label="Pompe 1" value={pompes.pompe1} />
-          <ValueRow label="Pompe 2" value={pompes.pompe2} />
-
-          <SectionTitle title="Compteur EMU" />
-          <ValueRow label="Débit" value={emu.debit} />
-          <OkNokRow label="Contrôle voyants" value={emu.controle_voyants} />
-          <OkNokRow label="Contrôle UV" value={emu.controle_uv} />
-
-          {d.chaufferie_ecs.observations ? (
-            <div style={{ padding: "8px 0" }}>
-              <p style={{ fontSize: 11, color: "#AEAEB2", margin: "0 0 3px" }}>Observations</p>
-              <p style={{ fontSize: 13, color: "#1D1D1F", margin: 0 }}>{d.chaufferie_ecs.observations}</p>
-            </div>
-          ) : null}
-        </div>
-
-        <div style={{ backgroundColor: "#FFFFFF", borderRadius: 16, border: "1px solid rgba(0,0,0,0.06)", padding: "4px 16px 8px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", marginBottom: 14 }}>
-          <SectionTitle title="Réception" />
-          <OkNokRow label="Alarme incendie" value={recep.alarme_incendie} />
-          <OkNokRow label="Éclairage secours" value={recep.eclairage_secours} />
-          <OkNokRow label="Pression GEG" value={recep.pression_geg} />
-
-          <SectionTitle title="Cave / économat" />
-          <OkNokRow label="Séparateur graisse" value={cave.separateur_graisse} />
-          <OkNokRow label="Coffret relevage" value={cave.coffret_relevage} />
-          <OkNokRow label="Pompe puisard" value={cave.pompe_puisard} />
-
-          <SectionTitle title="Compresseur air" />
-          <ValueRow label="Pression Spilotairs" value={compr.pression_spilotairs} unit=" bar" />
-          <OkNokRow label="Mise en route" value={compr.mise_en_route} />
-          <OkNokRow label="Contrôle huile" value={compr.controle_huile} />
-
-          <SectionTitle title="Coffrets" />
-          <OkNokRow label="Relevage — voyants" value={crel.controle_voyants} />
-          <OkNokRow label="Puisard — voyants" value={cpuis.controle_voyants} />
-
-          {d.technique_generale.observations ? (
-            <div style={{ padding: "8px 0" }}>
-              <p style={{ fontSize: 11, color: "#AEAEB2", margin: "0 0 3px" }}>Observations</p>
-              <p style={{ fontSize: 13, color: "#1D1D1F", margin: 0 }}>{d.technique_generale.observations}</p>
-            </div>
-          ) : null}
-        </div>
+        {ronde.signature ? (
+          <div style={{ backgroundColor: "#FFFFFF", borderRadius: 16, border: "1px solid rgba(0,0,0,0.06)", padding: "18px 20px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", marginBottom: 14 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.7px", textTransform: "uppercase", color: "#AEAEB2", margin: "0 0 8px" }}>
+              Signature
+            </p>
+            <Image
+              src={ronde.signature}
+              alt="Signature de la ronde"
+              width={420}
+              height={180}
+              unoptimized
+              style={{ width: "100%", maxWidth: 420, height: "auto", borderRadius: 12, border: "1px solid rgba(0,0,0,0.08)" }}
+            />
+          </div>
+        ) : null}
       </div>
     </div>
   );

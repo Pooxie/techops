@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { AlertTriangle, Clock, CheckCircle, Plus, X, RotateCcw, ChevronRight, User } from "lucide-react";
+import { AlertTriangle, Clock, CheckCircle, Plus, X, RotateCcw, ChevronRight, User, BedDouble, Wrench } from "lucide-react";
 import SignatureCanvas from "react-signature-canvas";
 import Header from "@/components/layout/Header";
 import {
@@ -100,11 +100,23 @@ function InterventionCard({
         <p style={{ fontSize: 15, fontWeight: 600, color: "#1D1D1F", margin: "0 0 4px", lineHeight: 1.3 }}>
           {item.titre}
         </p>
-        {/* Zone / équipement */}
-        {(item.zone || item.equipement) && (
-          <p style={{ fontSize: 12, color: "#8E8E93", margin: "0 0 6px" }}>
-            {[item.zone, item.equipement].filter(Boolean).join(" · ")}
-          </p>
+        {/* Lieu */}
+        {(item.numero_chambre || item.equipement || item.zone) && (
+          <div style={{ display: "flex", alignItems: "center", gap: 4, margin: "0 0 6px" }}>
+            {item.numero_chambre ? (
+              <>
+                <BedDouble size={12} color="#8E8E93" strokeWidth={2} />
+                <span style={{ fontSize: 12, color: "#8E8E93" }}>Chambre {item.numero_chambre}</span>
+              </>
+            ) : (
+              <>
+                <Wrench size={12} color="#8E8E93" strokeWidth={2} />
+                <span style={{ fontSize: 12, color: "#8E8E93" }}>
+                  {[item.equipement, item.zone].filter(Boolean).join(" · ")}
+                </span>
+              </>
+            )}
+          </div>
         )}
         {/* Assigné + date */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -121,6 +133,23 @@ function InterventionCard({
     </div>
   );
 }
+
+// ── Liste des chambres ────────────────────────────────────────────────────────
+
+function rangeNums(from: number, to: number, exclude: number[] = []): string[] {
+  const res: string[] = [];
+  for (let i = from; i <= to; i++) if (!exclude.includes(i)) res.push(String(i));
+  return res;
+}
+
+const TOUTES_CHAMBRES: string[] = [
+  ...rangeNums(101, 115, [113]),
+  ...rangeNums(120, 138),
+  ...rangeNums(140, 155),
+  ...rangeNums(201, 215, [213]),
+  ...rangeNums(220, 238),
+  ...rangeNums(240, 255),
+];
 
 // ── Formulaire de création ────────────────────────────────────────────────────
 
@@ -145,6 +174,7 @@ function CreateSheet({
   const [priorite, setPriorite] = useState<"normale" | "urgente">("normale");
   const [origine, setOrigine] = useState<"terrain" | "reception" | "preventif" | "dt">("terrain");
   const [assigneId, setAssigneId] = useState<string>("");
+  const [numeroChambre, setNumeroChambre] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -182,6 +212,7 @@ function CreateSheet({
         priorite,
         origine,
         assigne_id: assigneId || null,
+        numero_chambre: numeroChambre || null,
       });
       onCreated();
       onClose();
@@ -353,6 +384,21 @@ function CreateSheet({
               <option value="">Non assigné</option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>{u.prenom} {u.nom}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Numéro de chambre */}
+          <div>
+            <label style={labelStyle}>NUMÉRO DE CHAMBRE (optionnel)</label>
+            <select
+              value={numeroChambre}
+              onChange={(e) => setNumeroChambre(e.target.value)}
+              style={{ ...inputStyle, appearance: "none", color: numeroChambre ? "#1D1D1F" : "#AEAEB2" }}
+            >
+              <option value="">— Aucune chambre —</option>
+              {TOUTES_CHAMBRES.map((c) => (
+                <option key={c} value={c}>{c}</option>
               ))}
             </select>
           </div>

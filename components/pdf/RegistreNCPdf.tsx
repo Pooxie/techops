@@ -138,6 +138,109 @@ type Props = {
   generatedBy?: string;
 };
 
+type GroupChunk = {
+  key: string;
+  controleNom: string;
+  rows: NCRecord[];
+  totalCount: number;
+  isContinuation: boolean;
+};
+
+const FIRST_PAGE_CAPACITY = 18;
+const NEXT_PAGE_CAPACITY = 26;
+const GROUP_OVERHEAD_UNITS = 3;
+
+function splitGroupIntoChunks(controleNom: string, rows: NCRecord[]): GroupChunk[] {
+  const chunks: GroupChunk[] = [];
+  const maxRowsPerChunk = Math.max(1, NEXT_PAGE_CAPACITY - GROUP_OVERHEAD_UNITS);
+
+  for (let index = 0; index < rows.length; index += maxRowsPerChunk) {
+    const slice = rows.slice(index, index + maxRowsPerChunk);
+    chunks.push({
+      key: `${controleNom}-${index}`,
+      controleNom,
+      rows: slice,
+      totalCount: rows.length,
+      isContinuation: index > 0,
+    });
+  }
+
+  return chunks;
+}
+
+function estimateChunkUnits(chunk: GroupChunk) {
+  return GROUP_OVERHEAD_UNITS + chunk.rows.length;
+}
+
+function paginateChunks(chunks: GroupChunk[]) {
+  const pages: GroupChunk[][] = [];
+  let currentPage: GroupChunk[] = [];
+  let remaining = FIRST_PAGE_CAPACITY;
+
+  for (const chunk of chunks) {
+    const chunkUnits = estimateChunkUnits(chunk);
+
+    if (currentPage.length > 0 && chunkUnits > remaining) {
+      pages.push(currentPage);
+      currentPage = [];
+      remaining = NEXT_PAGE_CAPACITY;
+    }
+
+    if (chunkUnits > remaining && currentPage.length === 0) {
+      pages.push([chunk]);
+      remaining = NEXT_PAGE_CAPACITY;
+      continue;
+    }
+
+    currentPage.push(chunk);
+    remaining -= chunkUnits;
+  }
+
+  if (currentPage.length > 0) {
+    pages.push(currentPage);
+  }
+
+  return pages;
+}
+
+function renderNcRow(nc: NCRecord, i: number) {
+  const gravBg = nc.gravite === "majeure" ? C.redBg : C.orangeBg;
+  const gravCol = nc.gravite === "majeure" ? C.red : C.orange;
+  const gravLbl = nc.gravite === "majeure" ? "Majeure" : "Mineure";
+  const statutBg = nc.statut === "ouverte" ? C.redBg : C.greenBg;
+  const statutCol = nc.statut === "ouverte" ? C.red : C.green;
+  const statutLbl = nc.statut === "ouverte" ? "Ouverte" : "Levée";
+  const rowBg = nc.gravite === "majeure" && nc.statut === "ouverte"
+    ? "#FFF8F8"
+    : i % 2 === 1 ? C.greyBg : C.white;
+  const cout = [
+    nc.cost_expl ? `Expl. ${fmtCost(nc.cost_expl)}` : null,
+    nc.cost_iae ? `IAE ${fmtCost(nc.cost_iae)}` : null,
+  ].filter(Boolean).join("\n") || "—";
+
+  return (
+    <View key={nc.id} style={[s.tableRow, { backgroundColor: rowBg }]}>
+      <Text style={[s.tdSmall, s.colObs]}>{nc.source_obs_no ? `#${nc.source_obs_no}` : "—"}</Text>
+      <Text style={[s.tdText, s.colDesc]}>{nc.description}</Text>
+      <View style={[s.colGravite, { alignItems: "flex-start" }]}>
+        <View style={[s.badge, { backgroundColor: gravBg }]}>
+          <Text style={[s.badgeText, { color: gravCol }]}>{gravLbl}</Text>
+        </View>
+      </View>
+      <View style={[s.colStatut, { alignItems: "flex-start" }]}>
+        <View style={[s.badge, { backgroundColor: statutBg }]}>
+          <Text style={[s.badgeText, { color: statutCol }]}>{statutLbl}</Text>
+        </View>
+      </View>
+      <Text style={[s.tdSmall, s.colDate, { color: nc.statut === "ouverte" && nc.date_cible ? C.orange : C.grey }]}>
+        {fmtDate(nc.date_cible)}
+      </Text>
+      <Text style={[s.tdSmall, s.colOwner]}>{nc.action_owner_name || "—"}</Text>
+      <Text style={[s.tdSmall, s.colCout]}>{cout}</Text>
+    </View>
+  );
+}
+
 export function RegistreNCPdf({ ncs, kpis, filterLabel = "Toutes", generatedBy = "TechOps" }: Props) {
   const dateGen = new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
   const dateGenShort = new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
@@ -162,128 +265,101 @@ export function RegistreNCPdf({ ncs, kpis, filterLabel = "Toutes", generatedBy =
     { label: "Levées",   value: kpis.leveeTotal,       bg: C.greenBg,  color: C.green },
   ];
 
+  const groupChunks = groupes.flatMap(([controleNom, groupNcs]) => splitGroupIntoChunks(controleNom, groupNcs));
+  const pages = (() => {
+    const computedPages = paginateChunks(groupChunks);
+    return computedPages.length > 0 ? computedPages : [[]];
+  })();
+
   return (
     <Document
       title={`Registre NC Sofitel Ajaccio — ${dateGenShort}`}
       author="TechOps"
       subject="Registre Non-conformités"
     >
-      <Page size="A4" style={s.page}>
-
-        {/* ── En-tête ── */}
-        <View style={s.header} fixed>
-          <View style={s.headerLeft}>
-            <Text style={s.headerLogo}>TechOps</Text>
-            <Text style={s.headerTitle}>Registre Non-conformités</Text>
-            <Text style={s.headerHotel}>Sofitel Golfe d'Ajaccio Thalasso Sea &amp; Spa</Text>
+      {pages.map((pageChunks, pageIndex) => (
+        <Page key={`page-${pageIndex + 1}`} size="A4" style={s.page}>
+          {/* ── En-tête ── */}
+          <View style={s.header} fixed>
+            <View style={s.headerLeft}>
+              <Text style={s.headerLogo}>TechOps</Text>
+              <Text style={s.headerTitle}>Registre Non-conformités</Text>
+              <Text style={s.headerHotel}>Sofitel Golfe d&apos;Ajaccio Thalasso Sea &amp; Spa</Text>
+            </View>
+            <View style={s.headerRight}>
+              <Text style={s.headerMeta}>Généré le {dateGen}</Text>
+              <Text style={s.headerMeta}>Filtre : {filterLabel}</Text>
+              <Text style={s.headerMeta}>Par : {generatedBy}</Text>
+            </View>
           </View>
-          <View style={s.headerRight}>
-            <Text style={s.headerMeta}>Généré le {dateGen}</Text>
-            <Text style={s.headerMeta}>Filtre : {filterLabel}</Text>
-            <Text style={s.headerMeta}>Par : {generatedBy}</Text>
-          </View>
-        </View>
 
-        {/* ── KPIs ── */}
-        <View style={s.summary}>
-          {summaryCards.map(({ label, value, bg, color }) => (
-            <View key={label} style={[s.summaryCard, { backgroundColor: bg }]}>
-              <Text style={[s.summaryValue, { color }]}>{value}</Text>
-              <Text style={s.summaryLabel}>{label}</Text>
+          {pageIndex === 0 && (
+            <>
+              {/* ── KPIs ── */}
+              <View style={s.summary}>
+                {summaryCards.map(({ label, value, bg, color }) => (
+                  <View key={label} style={[s.summaryCard, { backgroundColor: bg }]}>
+                    <Text style={[s.summaryValue, { color }]}>{value}</Text>
+                    <Text style={s.summaryLabel}>{label}</Text>
+                  </View>
+                ))}
+              </View>
+
+              {/* ── Coûts ── */}
+              {(kpis.coutExpl > 0 || kpis.coutIae > 0) && (
+                <View style={{ flexDirection: "row", gap: 10, marginBottom: 16 }}>
+                  {kpis.coutExpl > 0 && (
+                    <View style={{ flex: 1, backgroundColor: C.greyBg, borderRadius: 6, padding: 10 }}>
+                      <Text style={{ fontSize: 7, color: C.grey, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>Coût Exploitation</Text>
+                      <Text style={{ fontSize: 13, fontFamily: "Helvetica-Bold", color: C.black }}>{fmtCost(kpis.coutExpl)}</Text>
+                    </View>
+                  )}
+                  {kpis.coutIae > 0 && (
+                    <View style={{ flex: 1, backgroundColor: C.greyBg, borderRadius: 6, padding: 10 }}>
+                      <Text style={{ fontSize: 7, color: C.grey, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>Coût IAE</Text>
+                      <Text style={{ fontSize: 13, fontFamily: "Helvetica-Bold", color: C.black }}>{fmtCost(kpis.coutIae)}</Text>
+                    </View>
+                  )}
+                </View>
+              )}
+            </>
+          )}
+
+          {/* ── Groupes ── */}
+          {pageChunks.map((chunk) => (
+            <View key={chunk.key} style={{ marginTop: 12 }} wrap={false}>
+              <View style={[s.groupHeader, { marginTop: 0 }]}>
+                <Text style={s.groupTitle}>
+                  {chunk.controleNom}
+                  {chunk.isContinuation ? " (suite)" : ""}
+                </Text>
+                <Text style={s.groupCount}>{chunk.totalCount} NC</Text>
+              </View>
+
+              <View style={s.tableHeader}>
+                <Text style={[s.thText, s.colObs]}>Obs.</Text>
+                <Text style={[s.thText, s.colDesc]}>Description</Text>
+                <Text style={[s.thText, s.colGravite]}>Gravité</Text>
+                <Text style={[s.thText, s.colStatut]}>Statut</Text>
+                <Text style={[s.thText, s.colDate]}>Date cible</Text>
+                <Text style={[s.thText, s.colOwner]}>Responsable</Text>
+                <Text style={[s.thText, s.colCout]}>Coûts</Text>
+              </View>
+
+              {chunk.rows.map((nc, rowIndex) => renderNcRow(nc, rowIndex))}
             </View>
           ))}
-        </View>
 
-        {/* ── Coûts ── */}
-        {(kpis.coutExpl > 0 || kpis.coutIae > 0) && (
-          <View style={{ flexDirection: "row", gap: 10, marginBottom: 16 }}>
-            {kpis.coutExpl > 0 && (
-              <View style={{ flex: 1, backgroundColor: C.greyBg, borderRadius: 6, padding: 10 }}>
-                <Text style={{ fontSize: 7, color: C.grey, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>Coût Exploitation</Text>
-                <Text style={{ fontSize: 13, fontFamily: "Helvetica-Bold", color: C.black }}>{fmtCost(kpis.coutExpl)}</Text>
-              </View>
-            )}
-            {kpis.coutIae > 0 && (
-              <View style={{ flex: 1, backgroundColor: C.greyBg, borderRadius: 6, padding: 10 }}>
-                <Text style={{ fontSize: 7, color: C.grey, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 3 }}>Coût IAE</Text>
-                <Text style={{ fontSize: 13, fontFamily: "Helvetica-Bold", color: C.black }}>{fmtCost(kpis.coutIae)}</Text>
-              </View>
-            )}
+          {/* ── Pied de page ── */}
+          <View style={s.footer} fixed>
+            <Text style={s.footerText}>Document généré par TechOps le {dateGen} · Confidentiel</Text>
+            <Text
+              style={s.footerText}
+              render={({ pageNumber, totalPages }) => `Page ${pageNumber} / ${totalPages}`}
+            />
           </View>
-        )}
-
-        {/* ── Groupes ── */}
-        {groupes.map(([controleNom, groupNcs]) => (
-          <View key={controleNom} style={s.groupHeader.marginTop ? undefined : undefined} wrap={false}>
-
-            {/* Titre groupe */}
-            <View style={s.groupHeader}>
-              <Text style={s.groupTitle}>{controleNom}</Text>
-              <Text style={s.groupCount}>{groupNcs.length} NC</Text>
-            </View>
-
-            {/* En-têtes tableau */}
-            <View style={s.tableHeader}>
-              <Text style={[s.thText, s.colObs]}>Obs.</Text>
-              <Text style={[s.thText, s.colDesc]}>Description</Text>
-              <Text style={[s.thText, s.colGravite]}>Gravité</Text>
-              <Text style={[s.thText, s.colStatut]}>Statut</Text>
-              <Text style={[s.thText, s.colDate]}>Date cible</Text>
-              <Text style={[s.thText, s.colOwner]}>Responsable</Text>
-              <Text style={[s.thText, s.colCout]}>Coûts</Text>
-            </View>
-
-            {/* Lignes */}
-            {groupNcs.map((nc, i) => {
-              const gravBg   = nc.gravite === "majeure" ? C.redBg    : C.orangeBg;
-              const gravCol  = nc.gravite === "majeure" ? C.red      : C.orange;
-              const gravLbl  = nc.gravite === "majeure" ? "Majeure"  : "Mineure";
-              const statutBg = nc.statut  === "ouverte" ? C.redBg    : C.greenBg;
-              const statutCol = nc.statut === "ouverte" ? C.red      : C.green;
-              const statutLbl = nc.statut === "ouverte" ? "Ouverte"  : "Levée";
-              const rowBg = nc.gravite === "majeure" && nc.statut === "ouverte"
-                ? "#FFF8F8"
-                : i % 2 === 1 ? C.greyBg : C.white;
-              const cout = [
-                nc.cost_expl ? `Expl. ${fmtCost(nc.cost_expl)}` : null,
-                nc.cost_iae  ? `IAE ${fmtCost(nc.cost_iae)}`    : null,
-              ].filter(Boolean).join("\n") || "—";
-
-              return (
-                <View key={nc.id} style={[s.tableRow, { backgroundColor: rowBg }]}>
-                  <Text style={[s.tdSmall, s.colObs]}>{nc.source_obs_no ? `#${nc.source_obs_no}` : "—"}</Text>
-                  <Text style={[s.tdText, s.colDesc]}>{nc.description}</Text>
-                  <View style={[s.colGravite, { alignItems: "flex-start" }]}>
-                    <View style={[s.badge, { backgroundColor: gravBg }]}>
-                      <Text style={[s.badgeText, { color: gravCol }]}>{gravLbl}</Text>
-                    </View>
-                  </View>
-                  <View style={[s.colStatut, { alignItems: "flex-start" }]}>
-                    <View style={[s.badge, { backgroundColor: statutBg }]}>
-                      <Text style={[s.badgeText, { color: statutCol }]}>{statutLbl}</Text>
-                    </View>
-                  </View>
-                  <Text style={[s.tdSmall, s.colDate, { color: nc.statut === "ouverte" && nc.date_cible ? C.orange : C.grey }]}>
-                    {fmtDate(nc.date_cible)}
-                  </Text>
-                  <Text style={[s.tdSmall, s.colOwner]}>{nc.action_owner_name || "—"}</Text>
-                  <Text style={[s.tdSmall, s.colCout]}>{cout}</Text>
-                </View>
-              );
-            })}
-          </View>
-        ))}
-
-        {/* ── Pied de page ── */}
-        <View style={s.footer} fixed>
-          <Text style={s.footerText}>Document généré par TechOps le {dateGen} · Confidentiel</Text>
-          <Text
-            style={s.footerText}
-            render={({ pageNumber, totalPages }) => `Page ${pageNumber} / ${totalPages}`}
-          />
-        </View>
-
-      </Page>
+        </Page>
+      ))}
     </Document>
   );
 }

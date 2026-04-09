@@ -4,14 +4,20 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Sunrise, Sunset, CheckCircle, AlertCircle, History, ChevronRight } from "lucide-react";
 import Header from "@/components/layout/Header";
+import RondeTrendSection from "@/components/rondes/RondeTrendSection";
 import {
   fetchRondesTodayWithDonnees,
   fetchRondesHistoriqueWithDonnees,
   fetchRondesKPI,
   type RondeWithDonnees,
   type RondesKPI,
-  type DonneesRonde,
 } from "@/lib/supabase";
+import {
+  formatFieldValue,
+  getFieldStatus,
+  getFieldValue,
+  getListSummaryFields,
+} from "@/lib/rondes";
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
@@ -28,10 +34,8 @@ function isLate(type: "ouverture" | "fermeture") {
   return type === "ouverture" ? h >= 10 : h >= 20;
 }
 
-// ── Dot indicateur de valeur ─────────────────────────────────────────────────
-
-function Dot({ ok }: { ok: boolean | null }) {
-  const color = ok === null ? "#C7C7CC" : ok ? "#34C759" : "#FF3B30";
+function Dot({ status }: { status: "empty" | "ok" | "alert" }) {
+  const color = status === "empty" ? "#C7C7CC" : status === "ok" ? "#34C759" : "#FF3B30";
   return (
     <span style={{
       display: "inline-block", width: 8, height: 8,
@@ -40,42 +44,21 @@ function Dot({ ok }: { ok: boolean | null }) {
   );
 }
 
-function isPhOk(v: number | null) {
-  if (v === null) return null;
-  return v >= 7.2 && v <= 7.6;
-}
-function isChloreOk(v: number | null) {
-  if (v === null) return null;
-  return v >= 0.4 && v <= 1.4;
-}
-function isEcsOk(v: number | null) {
-  if (v === null) return null;
-  return v >= 55 && v <= 65;
-}
-
-function KeyValues({ donnees }: { donnees: DonneesRonde }) {
-  const ph = donnees.piscine_thalasso.piscine_hotel.ph;
-  const chlore = donnees.piscine_thalasso.piscine_hotel.chlore_libre;
-  const ecs = donnees.chaufferie_ecs.chaufferie.temp_depart_ecs;
-  const fuel = donnees.chaufferie_ecs.dry_cooling.niveau_fuel;
-
-  const vals = [
-    { label: "pH", value: ph, ok: isPhOk(ph), unit: "" },
-    { label: "Chlore", value: chlore, ok: isChloreOk(chlore), unit: " mg/L" },
-    { label: "T° ECS", value: ecs, ok: isEcsOk(ecs), unit: "°C" },
-    { label: "Fuel", value: fuel, ok: null, unit: "%" },
-  ];
-
+function KeyValues({ ronde }: { ronde: RondeWithDonnees }) {
+  const fields = getListSummaryFields(ronde.type);
   return (
     <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 10, marginBottom: 12 }}>
-      {vals.map(({ label, value, ok, unit }) => (
-        <div key={label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-          <Dot ok={value !== null ? ok : null} />
+      {fields.map((field) => {
+        const value = getFieldValue(ronde.donnees, field.path);
+        return (
+        <div key={field.id} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          <Dot status={getFieldStatus(field, ronde.donnees)} />
           <span style={{ fontSize: 12, color: "#6E6E73" }}>
-            {label}: {value !== null ? `${value}${unit}` : "—"}
+              {field.label}: {formatFieldValue(field, value)}
           </span>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -156,7 +139,7 @@ function RondeCard({ type, ronde }: { type: "ouverture" | "fermeture"; ronde: Ro
               </span>
             )}
           </div>
-          <KeyValues donnees={ronde.donnees} />
+          <KeyValues ronde={ronde} />
           <Link
             href={`/rondes/detail/${ronde.id}`}
             style={{
@@ -348,6 +331,43 @@ export default function RondesPage() {
         <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 32 }}>
           <RondeCard type="ouverture" ronde={todayRondes.ouverture} />
           <RondeCard type="fermeture" ronde={todayRondes.fermeture} />
+        </div>
+
+        {/* Tendances */}
+        <div style={{ marginBottom: 32 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <div style={{
+              width: 28,
+              height: 28,
+              borderRadius: 10,
+              background: "linear-gradient(135deg, #DBEAFE, #FCE7F3)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 11,
+              fontWeight: 800,
+              color: "#334155",
+            }}>
+              7J
+            </div>
+            <div>
+              <p style={{ margin: 0, fontSize: 11, fontWeight: 800, letterSpacing: "0.7px", textTransform: "uppercase", color: "#64748B" }}>
+                Tendances 7 jours
+              </p>
+              <p style={{ margin: "2px 0 0", fontSize: 13, color: "#94A3B8" }}>
+                Une vue plus visuelle des dérives importantes sur les dernières rondes.
+              </p>
+            </div>
+          </div>
+
+          {loading ? (
+            <p style={{ fontSize: 14, color: "#AEAEB2" }}>Chargement des tendances…</p>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16 }}>
+              <RondeTrendSection type="ouverture" historique={historique} />
+              <RondeTrendSection type="fermeture" historique={historique} />
+            </div>
+          )}
         </div>
 
         {/* Historique 7 jours */}

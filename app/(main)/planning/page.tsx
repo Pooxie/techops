@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   createTache,
@@ -8,14 +9,12 @@ import {
   fetchPlanningPrestataires,
   fetchPlanningRondes,
   fetchTaches,
-  fetchUsers,
   toggleTacheStatut,
   updateTache,
   type PlanningInterventionEvent,
   type PlanningRondeEvent,
   type PrestataireEvent,
   type TacheRecord,
-  type UserRecord,
 } from "@/lib/supabase";
 
 // ─── Date helpers ──────────────────────────────────────────────────────────────
@@ -70,6 +69,10 @@ function kindLabel(kind: GridEvent["kind"]): string {
   return { prestataire: "Prestataire", intervention: "Intervention", ronde: "Ronde", tache: "Tâche" }[kind];
 }
 
+function isClickableEvent(event: GridEvent) {
+  return event.kind === "tache" || event.kind === "prestataire" || event.kind === "intervention" || event.kind === "ronde";
+}
+
 // ─── Style constants ───────────────────────────────────────────────────────────
 
 const navBtn: React.CSSProperties = {
@@ -95,22 +98,23 @@ const inputSt: React.CSSProperties = {
 function EventChip({
   event,
   onToggle,
-  onSelectTache,
+  onSelectEvent,
 }: {
   event: GridEvent;
   onToggle?: (id: string, s: "a_faire" | "fait") => void;
-  onSelectTache?: (t: TacheRecord) => void;
+  onSelectEvent?: (event: GridEvent) => void;
 }) {
   const color = eventColor(event);
   const label = eventLabel(event);
   const isTache = event.kind === "tache";
   const isDone = isTache && (event.data as TacheRecord).statut === "fait";
+  const clickable = isClickableEvent(event) && Boolean(onSelectEvent);
 
   return (
     <div
       onClick={
-        isTache && onSelectTache
-          ? () => onSelectTache(event.data as TacheRecord)
+        clickable
+          ? () => onSelectEvent?.(event)
           : isTache && onToggle
           ? () => { const t = event.data as TacheRecord; onToggle(t.id, t.statut === "fait" ? "a_faire" : "fait"); }
           : undefined
@@ -121,7 +125,7 @@ function EventChip({
         borderRadius: 6,
         padding: "3px 6px",
         marginBottom: 3,
-        cursor: isTache ? "pointer" : "default",
+        cursor: clickable ? "pointer" : "default",
         opacity: isDone ? 0.6 : 1,
       }}
     >
@@ -151,13 +155,13 @@ function DesktopGrid({
   weekDays,
   eventsForDay,
   onToggle,
-  onSelectTache,
+  onSelectEvent,
   today,
 }: {
   weekDays: Date[];
   eventsForDay: (d: Date) => GridEvent[];
   onToggle: (id: string, s: "a_faire" | "fait") => void;
-  onSelectTache: (t: TacheRecord) => void;
+  onSelectEvent: (event: GridEvent) => void;
   today: Date;
 }) {
   return (
@@ -221,7 +225,7 @@ function DesktopGrid({
                   </div>
                 ) : (
                   events.map((e, j) => (
-                    <EventChip key={j} event={e} onToggle={onToggle} onSelectTache={onSelectTache} />
+                    <EventChip key={j} event={e} onToggle={onToggle} onSelectEvent={onSelectEvent} />
                   ))
                 )}
               </div>
@@ -238,14 +242,12 @@ function DesktopGrid({
 function MobileList({
   weekDays,
   eventsForDay,
-  onToggle,
-  onSelectTache,
+  onSelectEvent,
   today,
 }: {
   weekDays: Date[];
   eventsForDay: (d: Date) => GridEvent[];
-  onToggle: (id: string, s: "a_faire" | "fait") => void;
-  onSelectTache: (t: TacheRecord) => void;
+  onSelectEvent: (event: GridEvent) => void;
   today: Date;
 }) {
   return (
@@ -294,19 +296,20 @@ function MobileList({
                   const label = eventLabel(e);
                   const isTache = e.kind === "tache";
                   const isDone = isTache && (e.data as TacheRecord).statut === "fait";
+                  const clickable = isClickableEvent(e);
                   return (
                     <div
                       key={j}
                       onClick={
-                        isTache
-                          ? () => onSelectTache(e.data as TacheRecord)
+                        clickable
+                          ? () => onSelectEvent(e)
                           : undefined
                       }
                       style={{
                         display: "flex", alignItems: "center", gap: 12,
                         padding: "12px 16px",
                         borderBottom: j < events.length - 1 ? "1px solid #F5F5F7" : "none",
-                        cursor: isTache ? "pointer" : "default",
+                        cursor: clickable ? "pointer" : "default",
                       }}
                     >
                       <div style={{ width: 4, height: 36, borderRadius: 2, backgroundColor: color, flexShrink: 0 }} />
@@ -372,11 +375,13 @@ function KpiCard({ label, value, color, icon }: { label: string; value: number; 
 
 function TacheDrawer({
   tache,
+  isMobile,
   onClose,
   onUpdated,
   onDeleted,
 }: {
   tache: TacheRecord;
+  isMobile: boolean;
   onClose: () => void;
   onUpdated: () => void;
   onDeleted: () => void;
@@ -414,12 +419,34 @@ function TacheDrawer({
   }
 
   const fmtD = (iso: string) => new Date(iso).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+  const detailRows = [
+    { label: "Date", value: fmtD(tache.date) },
+    { label: "Heure", value: tache.heure || "Non renseignée" },
+    { label: "Statut", value: tache.statut === "fait" ? "Tâche accomplie" : "À faire" },
+    { label: "Assignée à", value: tache.assignee_prenom || "Non assignée" },
+    { label: "Créée par", value: tache.created_par || "Non renseigné" },
+  ];
 
   return (
     <>
       <div onClick={onClose} style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.40)", backdropFilter: "blur(4px)", zIndex: 200 }} />
-      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, backgroundColor: "#FFFFFF", borderRadius: "20px 20px 0 0", padding: "20px 20px 48px", zIndex: 201, maxHeight: "85vh", overflowY: "auto" }}>
-        <div style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: "#C7C7CC", margin: "0 auto 16px" }} />
+      <div style={{
+        position: "fixed",
+        top: isMobile ? "auto" : 0,
+        right: 0,
+        bottom: 0,
+        left: isMobile ? 0 : "auto",
+        width: isMobile ? "auto" : "min(440px, 100vw)",
+        backgroundColor: "#FFFFFF",
+        borderRadius: isMobile ? "20px 20px 0 0" : "24px 0 0 24px",
+        padding: "20px 20px 32px",
+        zIndex: 201,
+        maxHeight: isMobile ? "85vh" : "100vh",
+        height: isMobile ? "auto" : "100vh",
+        overflowY: "auto",
+        boxShadow: isMobile ? undefined : "-10px 0 30px rgba(0,0,0,0.12)",
+      }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: "#C7C7CC", margin: isMobile ? "0 auto 16px" : "0 0 16px" }} />
 
         {/* En-tête */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
@@ -446,6 +473,39 @@ function TacheDrawer({
         </div>
 
         {error && <p style={{ fontSize: 13, color: "#FF3B30", backgroundColor: "#FFF1F0", padding: "10px 12px", borderRadius: 10, margin: "0 0 16px" }}>{error}</p>}
+
+        {!editing && (
+          <div style={{ backgroundColor: "#FFFFFF", border: "1px solid rgba(0,0,0,0.06)", borderRadius: 14, padding: "14px 16px", marginBottom: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#8E8E93", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 10 }}>
+              Détail
+            </div>
+            {detailRows.map((row, index) => (
+              <div
+                key={row.label}
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  padding: "8px 0",
+                  borderBottom: index < detailRows.length - 1 ? "1px solid rgba(0,0,0,0.05)" : "none",
+                }}
+              >
+                <span style={{ fontSize: 13, color: "#8E8E93" }}>{row.label}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: "#1D1D1F", textAlign: "right" }}>{row.value}</span>
+              </div>
+            ))}
+
+            {tache.description ? (
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(0,0,0,0.05)" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#8E8E93", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 6 }}>
+                  Description
+                </div>
+                <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5, color: "#1D1D1F" }}>{tache.description}</p>
+              </div>
+            ) : null}
+          </div>
+        )}
 
         {/* Statut */}
         {!editing && (
@@ -485,6 +545,136 @@ function TacheDrawer({
             </button>
           </div>
         )}
+
+        <button onClick={onClose} style={{ width: "100%", padding: "12px", backgroundColor: "transparent", color: "#8E8E93", border: "1px solid rgba(0,0,0,0.10)", borderRadius: 12, fontSize: 14, cursor: "pointer" }}>
+          Fermer
+        </button>
+      </div>
+    </>
+  );
+}
+
+function PlanningEventDrawer({
+  event,
+  isMobile,
+  onClose,
+}: {
+  event: Exclude<GridEvent, { kind: "tache" }>;
+  isMobile: boolean;
+  onClose: () => void;
+}) {
+  const title = eventLabel(event);
+
+  const metadata = (() => {
+    if (event.kind === "prestataire") {
+      return [
+        { label: "Module", value: "Contrôles SET" },
+        { label: "Type", value: "Visite / échéance prestataire" },
+        { label: "Catégorie", value: event.data.categorie || "Non renseignée" },
+        { label: "Date", value: new Date(event.data.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) },
+      ];
+    }
+
+    if (event.kind === "intervention") {
+      return [
+        { label: "Module", value: "Interventions" },
+        { label: "Priorité", value: event.data.priorite },
+        { label: "Statut", value: event.data.statut },
+        { label: "Date", value: new Date(event.data.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) },
+      ];
+    }
+
+    return [
+      { label: "Module", value: "Rondes" },
+      { label: "Type", value: `Ronde ${event.data.type}` },
+      { label: "Statut", value: event.data.hors_norme ? "Hors norme" : "Tout OK" },
+      { label: "Date", value: new Date(event.data.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) },
+    ];
+  })();
+
+  const linkHref =
+    event.kind === "prestataire" ? "/set"
+    : event.kind === "intervention" ? "/interventions"
+    : `/rondes/detail/${event.data.id}`;
+
+  const linkLabel =
+    event.kind === "prestataire" ? "Ouvrir le module SET"
+    : event.kind === "intervention" ? "Ouvrir les interventions"
+    : "Ouvrir le détail de la ronde";
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.40)", backdropFilter: "blur(4px)", zIndex: 200 }} />
+      <div style={{
+        position: "fixed",
+        top: isMobile ? "auto" : 0,
+        right: 0,
+        bottom: 0,
+        left: isMobile ? 0 : "auto",
+        width: isMobile ? "auto" : "min(440px, 100vw)",
+        backgroundColor: "#FFFFFF",
+        borderRadius: isMobile ? "20px 20px 0 0" : "24px 0 0 24px",
+        padding: "20px 20px 32px",
+        zIndex: 201,
+        maxHeight: isMobile ? "85vh" : "100vh",
+        height: isMobile ? "auto" : "100vh",
+        overflowY: "auto",
+        boxShadow: isMobile ? undefined : "-10px 0 30px rgba(0,0,0,0.12)",
+      }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: "#C7C7CC", margin: isMobile ? "0 auto 16px" : "0 0 16px" }} />
+
+        <div style={{ marginBottom: 18 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "#8E8E93", backgroundColor: "#F5F5F7", padding: "2px 8px", borderRadius: 8, textTransform: "uppercase", letterSpacing: 0.5 }}>
+            {kindLabel(event.kind)}
+          </span>
+          <p style={{ fontSize: 18, fontWeight: 700, color: "#1D1D1F", margin: "10px 0 4px", lineHeight: 1.3 }}>{title}</p>
+          <p style={{ fontSize: 13, color: "#8E8E93", margin: 0 }}>
+            Événement du planning
+          </p>
+        </div>
+
+        <div style={{ backgroundColor: "#FFFFFF", border: "1px solid rgba(0,0,0,0.06)", borderRadius: 14, padding: "14px 16px", marginBottom: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#8E8E93", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 10 }}>
+            Détail
+          </div>
+          {metadata.map((row, index) => (
+            <div
+              key={row.label}
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                gap: 12,
+                padding: "8px 0",
+                borderBottom: index < metadata.length - 1 ? "1px solid rgba(0,0,0,0.05)" : "none",
+              }}
+            >
+              <span style={{ fontSize: 13, color: "#8E8E93" }}>{row.label}</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#1D1D1F", textAlign: "right" }}>{row.value}</span>
+            </div>
+          ))}
+        </div>
+
+        <Link
+          href={linkHref}
+          onClick={onClose}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: "100%",
+            padding: "13px",
+            backgroundColor: "#2563EB",
+            color: "#FFFFFF",
+            borderRadius: 12,
+            textDecoration: "none",
+            fontSize: 14,
+            fontWeight: 700,
+            marginBottom: 12,
+          }}
+        >
+          {linkLabel}
+        </Link>
 
         <button onClick={onClose} style={{ width: "100%", padding: "12px", backgroundColor: "transparent", color: "#8E8E93", border: "1px solid rgba(0,0,0,0.10)", borderRadius: 12, fontSize: 14, cursor: "pointer" }}>
           Fermer
@@ -600,11 +790,10 @@ export default function PlanningPage() {
   const [interventions, setInterventions] = useState<PlanningInterventionEvent[]>([]);
   const [rondes, setRondes] = useState<PlanningRondeEvent[]>([]);
   const [taches, setTaches] = useState<TacheRecord[]>([]);
-  const [users, setUsers] = useState<UserRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
-  const [selectedTache, setSelectedTache] = useState<TacheRecord | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<GridEvent | null>(null);
 
   // Mobile detection
   useEffect(() => {
@@ -621,18 +810,16 @@ export default function PlanningPage() {
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [p, iv, r, t, u] = await Promise.all([
+    const [p, iv, r, t] = await Promise.all([
       fetchPlanningPrestataires(startStr, endStr),
       fetchPlanningInterventions(startStr, endStr),
       fetchPlanningRondes(startStr, endStr),
       fetchTaches(startStr, endStr),
-      fetchUsers(),
     ]);
     setPrestataires(p);
     setInterventions(iv);
     setRondes(r);
     setTaches(t);
-    setUsers(u);
     setLoading(false);
   }, [startStr, endStr]);
 
@@ -712,9 +899,9 @@ export default function PlanningPage() {
           Chargement…
         </div>
       ) : isMobile ? (
-        <MobileList weekDays={weekDays} eventsForDay={eventsForDay} onToggle={handleToggle} onSelectTache={setSelectedTache} today={today} />
+        <MobileList weekDays={weekDays} eventsForDay={eventsForDay} onSelectEvent={setSelectedEvent} today={today} />
       ) : (
-        <DesktopGrid weekDays={weekDays} eventsForDay={eventsForDay} onToggle={handleToggle} onSelectTache={setSelectedTache} today={today} />
+        <DesktopGrid weekDays={weekDays} eventsForDay={eventsForDay} onToggle={handleToggle} onSelectEvent={setSelectedEvent} today={today} />
       )}
 
       {/* Legend */}
@@ -751,12 +938,21 @@ export default function PlanningPage() {
       </button>
 
       {/* Tâche drawer */}
-      {selectedTache && (
+      {selectedEvent?.kind === "tache" && (
         <TacheDrawer
-          tache={selectedTache}
-          onClose={() => setSelectedTache(null)}
-          onUpdated={() => { setSelectedTache(null); loadData(); }}
-          onDeleted={() => { setSelectedTache(null); loadData(); }}
+          tache={selectedEvent.data}
+          isMobile={isMobile}
+          onClose={() => setSelectedEvent(null)}
+          onUpdated={() => { setSelectedEvent(null); loadData(); }}
+          onDeleted={() => { setSelectedEvent(null); loadData(); }}
+        />
+      )}
+
+      {selectedEvent && selectedEvent.kind !== "tache" && (
+        <PlanningEventDrawer
+          event={selectedEvent}
+          isMobile={isMobile}
+          onClose={() => setSelectedEvent(null)}
         />
       )}
 

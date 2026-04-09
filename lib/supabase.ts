@@ -1,4 +1,11 @@
 import { createBrowserClient } from "@supabase/ssr";
+import {
+  normalizeDonneesRonde,
+  type DonneesRonde,
+} from "@/lib/rondes";
+
+export { DONNEES_DEFAULT, detectHorsNorme } from "@/lib/rondes";
+export type { DonneesRonde, OkNok } from "@/lib/rondes";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -404,175 +411,6 @@ export async function fetchDashboardKPIs(): Promise<DashboardKPIs> {
 
 // ─── RONDES ──────────────────────────────────────────────────────────────────
 
-export type OkNok = "ok" | "nok" | null;
-
-export type PiscineThalassoData = {
-  piscine_hotel: {
-    chlore_libre: number | null;
-    ph: number | null;
-    temperature: number | null;
-    nettoyage_filtres: OkNok;
-    niveau_hypochlorite: number | null;
-    compteur_debit: number | null;
-    controle_swan: OkNok;
-    debordement: OkNok;
-  };
-  piscine_institut: {
-    chlore_libre: number | null;
-    ph: number | null;
-    temperature: number | null;
-    gallet_pediluves: OkNok;
-    debordement: OkNok;
-  };
-  thalasso: {
-    temp_echange: number | null;
-    compteur_remplissage: number | null;
-    num_pompe_filtration: number | null;
-    nettoyage_filtres: OkNok;
-    controle_swan: OkNok;
-    compteur_remplissage_emf: number | null;
-  };
-  surpresseur: {
-    p5_eau_mer: number | null;
-    p7c_affusions: number | null;
-    p7b_douches_jet: number | null;
-    p7a_baignoires: number | null;
-  };
-  baches: {
-    piscine_niveau: OkNok;
-    emf_niveau: OkNok;
-    emc_niveau: OkNok;
-  };
-  filtration_emf: {
-    controle_uv: OkNok;
-    pression_av_filtre: number | null;
-    pression_apres_filtre: number | null;
-    controle_swan: OkNok;
-  };
-  observations: string;
-};
-
-export type ChaufferieEcsData = {
-  chaufferie: {
-    pompe_bouclage: OkNok;
-    pression_primaire: number | null;
-    temp_primaire_echangeur: number | null;
-    temp_depart_ecs: number | null;
-    temp_ballon: number | null;
-  };
-  recyclage: {
-    temp_s3: number | null;
-    temp_s4: number | null;
-    temp_s5: number | null;
-  };
-  geg_hotel: {
-    pression: number | null;
-    temperature: number | null;
-  };
-  dry_cooling: {
-    pression_circuit: OkNok;
-    niveau_fuel: number | null;
-  };
-  compteurs_pompes_edm: {
-    pompe1: number | null;
-    pompe2: number | null;
-  };
-  compteur_emu: {
-    debit: number | null;
-    controle_voyants: OkNok;
-    controle_uv: OkNok;
-  };
-  observations: string;
-};
-
-export type TechniqueGeneraleData = {
-  reception: {
-    alarme_incendie: OkNok;
-    eclairage_secours: OkNok;
-    pression_geg: OkNok;
-  };
-  cave_economat: {
-    separateur_graisse: OkNok;
-    coffret_relevage: OkNok;
-    pompe_puisard: OkNok;
-  };
-  compresseur_air: {
-    mise_en_route: OkNok;
-    controle_huile: OkNok;
-    pression_spilotairs: number | null;
-  };
-  coffret_relevage: {
-    controle_voyants: OkNok;
-  };
-  coffret_puisard: {
-    controle_voyants: OkNok;
-  };
-  observations: string;
-};
-
-export type DonneesRonde = {
-  piscine_thalasso: PiscineThalassoData;
-  chaufferie_ecs: ChaufferieEcsData;
-  technique_generale: TechniqueGeneraleData;
-};
-
-export const DONNEES_DEFAULT: DonneesRonde = {
-  piscine_thalasso: {
-    piscine_hotel: {
-      chlore_libre: null, ph: null, temperature: null,
-      nettoyage_filtres: null, niveau_hypochlorite: null,
-      compteur_debit: null, controle_swan: null, debordement: null,
-    },
-    piscine_institut: {
-      chlore_libre: null, ph: null, temperature: null,
-      gallet_pediluves: null, debordement: null,
-    },
-    thalasso: {
-      temp_echange: null, compteur_remplissage: null, num_pompe_filtration: null,
-      nettoyage_filtres: null, controle_swan: null, compteur_remplissage_emf: null,
-    },
-    surpresseur: { p5_eau_mer: null, p7c_affusions: null, p7b_douches_jet: null, p7a_baignoires: null },
-    baches: { piscine_niveau: null, emf_niveau: null, emc_niveau: null },
-    filtration_emf: { controle_uv: null, pression_av_filtre: null, pression_apres_filtre: null, controle_swan: null },
-    observations: "",
-  },
-  chaufferie_ecs: {
-    chaufferie: {
-      pompe_bouclage: null, pression_primaire: null, temp_primaire_echangeur: null,
-      temp_depart_ecs: null, temp_ballon: null,
-    },
-    recyclage: { temp_s3: null, temp_s4: null, temp_s5: null },
-    geg_hotel: { pression: null, temperature: null },
-    dry_cooling: { pression_circuit: null, niveau_fuel: null },
-    compteurs_pompes_edm: { pompe1: null, pompe2: null },
-    compteur_emu: { debit: null, controle_voyants: null, controle_uv: null },
-    observations: "",
-  },
-  technique_generale: {
-    reception: { alarme_incendie: null, eclairage_secours: null, pression_geg: null },
-    cave_economat: { separateur_graisse: null, coffret_relevage: null, pompe_puisard: null },
-    compresseur_air: { mise_en_route: null, controle_huile: null, pression_spilotairs: null },
-    coffret_relevage: { controle_voyants: null },
-    coffret_puisard: { controle_voyants: null },
-    observations: "",
-  },
-};
-
-export function detectHorsNorme(donnees: DonneesRonde): boolean {
-  const { piscine_hotel: ph, piscine_institut: pi, thalasso: th } = donnees.piscine_thalasso;
-  const { chaufferie: ch } = donnees.chaufferie_ecs;
-
-  if (ph.chlore_libre !== null && (ph.chlore_libre < 0.4 || ph.chlore_libre > 1.4)) return true;
-  if (ph.ph !== null && (ph.ph < 7.2 || ph.ph > 7.6)) return true;
-  if (pi.chlore_libre !== null && (pi.chlore_libre < 0.4 || pi.chlore_libre > 1.4)) return true;
-  if (pi.ph !== null && (pi.ph < 7.2 || pi.ph > 7.6)) return true;
-  if (th.temp_echange !== null && th.temp_echange > 32) return true;
-  if (ch.temp_depart_ecs !== null && (ch.temp_depart_ecs < 55 || ch.temp_depart_ecs > 65)) return true;
-  if (ch.temp_ballon !== null && ch.temp_ballon < 55) return true;
-
-  return false;
-}
-
 export type RondeRecord = {
   id: string;
   technicien_prenom: string;
@@ -639,6 +477,8 @@ export async function fetchRondesHistorique(days = 7): Promise<RondeRecord[]> {
 
 export type RondeWithDonnees = RondeRecord & {
   donnees: DonneesRonde;
+  observations: string | null;
+  signature: string | null;
 };
 
 export type RondesKPI = {
@@ -655,7 +495,7 @@ export async function fetchRondesTodayWithDonnees(): Promise<{ ouverture: RondeW
 
   const { data } = await supabase
     .from("rondes")
-    .select("id, type, date_heure, hors_norme, validee, donnees, users(prenom)")
+    .select("id, type, date_heure, hors_norme, validee, donnees, observations, signature, users(prenom)")
     .gte("date_heure", start.toISOString())
     .lte("date_heure", end.toISOString())
     .eq("validee", true)
@@ -672,7 +512,9 @@ export async function fetchRondesTodayWithDonnees(): Promise<{ ouverture: RondeW
       date_heure: row.date_heure,
       hors_norme: row.hors_norme,
       validee: row.validee,
-      donnees: (row.donnees as unknown as DonneesRonde) ?? DONNEES_DEFAULT,
+      donnees: normalizeDonneesRonde(row.donnees),
+      observations: row.observations ?? null,
+      signature: row.signature ?? null,
     };
     if (row.type === "ouverture" && !result.ouverture) result.ouverture = record;
     if (row.type === "fermeture" && !result.fermeture) result.fermeture = record;
@@ -688,7 +530,7 @@ export async function fetchRondesHistoriqueWithDonnees(days = 7): Promise<RondeW
 
   const { data } = await supabase
     .from("rondes")
-    .select("id, type, date_heure, hors_norme, validee, donnees, users(prenom)")
+    .select("id, type, date_heure, hors_norme, validee, donnees, observations, signature, users(prenom)")
     .gte("date_heure", since.toISOString())
     .eq("validee", true)
     .order("date_heure", { ascending: false });
@@ -701,7 +543,9 @@ export async function fetchRondesHistoriqueWithDonnees(days = 7): Promise<RondeW
     date_heure: row.date_heure,
     hors_norme: row.hors_norme,
     validee: row.validee,
-    donnees: (row.donnees as unknown as DonneesRonde) ?? DONNEES_DEFAULT,
+    donnees: normalizeDonneesRonde(row.donnees),
+    observations: row.observations ?? null,
+    signature: row.signature ?? null,
   }));
 }
 
@@ -709,7 +553,7 @@ export async function fetchRondeById(id: string): Promise<RondeWithDonnees | nul
   const supabase = createClient();
   const { data } = await supabase
     .from("rondes")
-    .select("id, type, date_heure, hors_norme, validee, donnees, users(prenom)")
+    .select("id, type, date_heure, hors_norme, validee, donnees, observations, signature, users(prenom)")
     .eq("id", id)
     .single();
 
@@ -721,7 +565,9 @@ export async function fetchRondeById(id: string): Promise<RondeWithDonnees | nul
     date_heure: data.date_heure,
     hors_norme: data.hors_norme,
     validee: data.validee,
-    donnees: (data.donnees as unknown as DonneesRonde) ?? DONNEES_DEFAULT,
+    donnees: normalizeDonneesRonde(data.donnees),
+    observations: data.observations ?? null,
+    signature: data.signature ?? null,
   };
 }
 
@@ -764,6 +610,7 @@ export type InterventionRecord = {
   description_cloture: string | null;
   cloturee_le: string | null;
   created_at: string;
+  numero_chambre: string | null;
 };
 
 export type UserRecord = {
@@ -773,6 +620,14 @@ export type UserRecord = {
   email: string | null;
   role: "technicien" | "dt";
   actif: boolean;
+};
+
+export type CurrentUserSummary = {
+  id: string;
+  prenom: string;
+  nom: string;
+  email: string | null;
+  role: "technicien" | "dt";
 };
 
 export type TechKPIs = {
@@ -794,6 +649,34 @@ export async function getCurrentUserProfile(): Promise<{ id: string; hotel_id: s
 
   if (!data) return null;
   return { id: data.id, hotel_id: data.hotel_id, role: data.role as "technicien" | "dt" };
+}
+
+export async function fetchCurrentUserSummary(): Promise<CurrentUserSummary | null> {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data } = await supabase
+    .from("users")
+    .select("id, prenom, nom, email, role")
+    .eq("id", user.id)
+    .single();
+
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    prenom: data.prenom ?? "",
+    nom: data.nom ?? "",
+    email: data.email ?? user.email ?? null,
+    role: data.role as "technicien" | "dt",
+  };
+}
+
+export async function signOutCurrentUser(): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.auth.signOut();
+  if (error) throw new Error(error.message);
 }
 
 export async function fetchTechniciens(): Promise<UserRecord[]> {
@@ -850,7 +733,7 @@ export async function fetchInterventions(): Promise<InterventionRecord[]> {
     .from("interventions")
     .select(`
       id, titre, description, zone, equipement, priorite, statut, origine,
-      assigne_id, description_cloture, cloturee_le, created_at,
+      assigne_id, description_cloture, cloturee_le, created_at, numero_chambre,
       assigne:users!assigne_id(prenom),
       createur:users!createur_id(prenom)
     `)
@@ -872,7 +755,90 @@ export async function fetchInterventions(): Promise<InterventionRecord[]> {
     description_cloture: row.description_cloture,
     cloturee_le: row.cloturee_le,
     created_at: row.created_at,
+    numero_chambre: row.numero_chambre ?? null,
   }));
+}
+
+export async function fetchInterventionsByChambre(numero: string): Promise<InterventionRecord[]> {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data: userData } = await supabase
+    .from("users")
+    .select("hotel_id")
+    .eq("id", user.id)
+    .single();
+  if (!userData) return [];
+
+  const { data } = await supabase
+    .from("interventions")
+    .select(`
+      id, titre, description, zone, equipement, priorite, statut, origine,
+      assigne_id, description_cloture, cloturee_le, created_at, numero_chambre,
+      assigne:users!assigne_id(prenom),
+      createur:users!createur_id(prenom)
+    `)
+    .eq("hotel_id", userData.hotel_id)
+    .eq("numero_chambre", numero)
+    .order("created_at", { ascending: false });
+
+  if (!data) return [];
+  return data.map((row) => ({
+    id: row.id,
+    titre: row.titre,
+    description: row.description,
+    zone: row.zone,
+    equipement: row.equipement,
+    priorite: row.priorite as "normale" | "urgente",
+    statut: row.statut as "a_traiter" | "en_cours" | "cloturee",
+    origine: row.origine,
+    assigne_id: row.assigne_id,
+    assigne_prenom: (row.assigne as unknown as { prenom: string } | null)?.prenom ?? null,
+    createur_prenom: (row.createur as unknown as { prenom: string } | null)?.prenom ?? null,
+    description_cloture: row.description_cloture,
+    cloturee_le: row.cloturee_le,
+    created_at: row.created_at,
+    numero_chambre: row.numero_chambre ?? null,
+  }));
+}
+
+export type ChambreStats = {
+  total: number;
+  thisMon: number;
+};
+
+export async function fetchAllChambreStats(): Promise<Record<string, ChambreStats>> {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return {};
+
+  const { data: userData } = await supabase
+    .from("users")
+    .select("hotel_id")
+    .eq("id", user.id)
+    .single();
+  if (!userData) return {};
+
+  const { data } = await supabase
+    .from("interventions")
+    .select("numero_chambre, created_at")
+    .eq("hotel_id", userData.hotel_id)
+    .not("numero_chambre", "is", null);
+
+  if (!data) return {};
+
+  const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+  const stats: Record<string, ChambreStats> = {};
+
+  for (const row of data) {
+    const num = row.numero_chambre as string;
+    if (!stats[num]) stats[num] = { total: 0, thisMon: 0 };
+    stats[num].total++;
+    if (row.created_at >= startOfMonth) stats[num].thisMon++;
+  }
+
+  return stats;
 }
 
 export async function fetchUsers(): Promise<UserRecord[]> {
@@ -902,6 +868,7 @@ export async function createIntervention(payload: {
   priorite: "normale" | "urgente";
   origine: "terrain" | "reception" | "preventif" | "dt";
   assigne_id: string | null;
+  numero_chambre?: string | null;
 }): Promise<void> {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -927,6 +894,7 @@ export async function createIntervention(payload: {
       priorite: payload.priorite,
       statut: "a_traiter",
       origine: payload.origine,
+      numero_chambre: payload.numero_chambre || null,
     })
     .select("id")
     .single();
@@ -1224,6 +1192,52 @@ export type NCEvolutionItem = {
   majeures: number;
   levees: number;
 };
+
+export type CoutEvolutionItem = {
+  month: string;
+  label: string;
+  expl: number;
+  iae: number;
+};
+
+export async function fetchCoutEvolution(): Promise<CoutEvolutionItem[]> {
+  const supabase = createClient();
+  const since = new Date();
+  since.setMonth(since.getMonth() - 5);
+  since.setDate(1);
+  since.setHours(0, 0, 0, 0);
+
+  const { data } = await supabase
+    .from("non_conformites")
+    .select("created_at, cost_expl, cost_iae")
+    .gte("created_at", since.toISOString());
+
+  const MONTHS_FR = ["Janv.", "Févr.", "Mars", "Avr.", "Mai", "Juin", "Juil.", "Août", "Sept.", "Oct.", "Nov.", "Déc."];
+  const map = new Map<string, { expl: number; iae: number }>();
+
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() - i);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    map.set(key, { expl: 0, iae: 0 });
+  }
+
+  for (const row of data ?? []) {
+    const d = new Date(row.created_at);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    if (!map.has(key)) continue;
+    const entry = map.get(key)!;
+    entry.expl += row.cost_expl ?? 0;
+    entry.iae += row.cost_iae ?? 0;
+  }
+
+  return Array.from(map.entries()).map(([month, costs]) => ({
+    month,
+    label: MONTHS_FR[parseInt(month.split("-")[1], 10) - 1],
+    ...costs,
+  }));
+}
 
 export async function fetchNCEvolution(): Promise<NCEvolutionItem[]> {
   const supabase = createClient();
