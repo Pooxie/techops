@@ -7,6 +7,7 @@ export type DonneesRonde = {
     debordement: OkNok;
     temperature: number | null;
     niveau_chlore: number | null;
+    concentration_chlore: number | null;
     controle_swan: OkNok;
   };
   piscine_institut: {
@@ -38,6 +39,7 @@ export type DonneesRonde = {
   };
   piscine_thalasso: {
     niveau_hypochlorite: number | null;
+    concentration_chlore: number | null;
     compteur_debit: number | null;
     numero_pompe_filtration: number | null;
     nettoyage_filtres: OkNok;
@@ -121,6 +123,7 @@ export const DONNEES_DEFAULT: DonneesRonde = {
     debordement: null,
     temperature: null,
     niveau_chlore: null,
+    concentration_chlore: null,
     controle_swan: null,
   },
   piscine_institut: {
@@ -152,6 +155,7 @@ export const DONNEES_DEFAULT: DonneesRonde = {
   },
   piscine_thalasso: {
     niveau_hypochlorite: null,
+    concentration_chlore: null,
     compteur_debit: null,
     numero_pompe_filtration: null,
     nettoyage_filtres: null,
@@ -427,7 +431,8 @@ export const RONDE_SECTIONS: readonly RondeSectionConfig[] = [
     id: "section-8",
     title: "Section 8 - Piscine thalasso",
     fields: [
-      { id: "thalasso-hypochlorite", kind: "number", label: "Niveau hypochlorite", path: ["piscine_thalasso", "niveau_hypochlorite"], unit: "L" },
+      { id: "thalasso-hypochlorite", kind: "number", label: "Niveau hypochlorite (L)", path: ["piscine_thalasso", "niveau_hypochlorite"], unit: "L" },
+      { id: "thalasso-concentration-chlore", kind: "number", label: "Concentration chlore", path: ["piscine_thalasso", "concentration_chlore"], unit: "mg/L", threshold: { kind: "range", min: 0.4, max: 1.4 } },
       { id: "thalasso-debit", kind: "number", label: "Compteur debit", path: ["piscine_thalasso", "compteur_debit"], unit: "m3/h" },
       { id: "thalasso-pompe", kind: "number", label: "N° pompe filtration", path: ["piscine_thalasso", "numero_pompe_filtration"] },
       { id: "thalasso-nettoyage", kind: "binary", label: "Nettoyage filtres", path: ["piscine_thalasso", "nettoyage_filtres"], labels: { ok: "Fait", nok: "Non fait" } },
@@ -485,7 +490,8 @@ export const RONDE_SECTIONS: readonly RondeSectionConfig[] = [
     title: "Section 14 - Piscine hotel (suite)",
     fields: [
       { id: "piscine-hotel-temperature", kind: "number", label: "Temperature", path: ["piscine_hotel", "temperature"], unit: "°C" },
-      { id: "piscine-hotel-niveau-chlore", kind: "number", label: "Niveau chlore", path: ["piscine_hotel", "niveau_chlore"], unit: "mg/L" },
+      { id: "piscine-hotel-niveau-chlore", kind: "number", label: "Niveau chlore (L)", path: ["piscine_hotel", "niveau_chlore"], unit: "L" },
+      { id: "piscine-hotel-concentration-chlore", kind: "number", label: "Concentration chlore", path: ["piscine_hotel", "concentration_chlore"], unit: "mg/L", threshold: { kind: "range", min: 0.4, max: 1.4 } },
       { id: "piscine-hotel-swan", kind: "binary", label: "Controle SWAN", path: ["piscine_hotel", "controle_swan"] },
     ],
   },
@@ -775,6 +781,7 @@ function mapLegacyToNew(raw: LegacyDonneesRonde): DonneesRonde {
       debordement: raw.piscine_thalasso?.piscine_hotel?.debordement ?? null,
       temperature: raw.piscine_thalasso?.piscine_hotel?.temperature ?? null,
       niveau_chlore: raw.piscine_thalasso?.piscine_hotel?.chlore_libre ?? null,
+      concentration_chlore: null,
       controle_swan: raw.piscine_thalasso?.piscine_hotel?.controle_swan ?? null,
     },
     piscine_institut: {
@@ -806,6 +813,7 @@ function mapLegacyToNew(raw: LegacyDonneesRonde): DonneesRonde {
     },
     piscine_thalasso: {
       niveau_hypochlorite: null,
+      concentration_chlore: null,
       compteur_debit: null,
       numero_pompe_filtration: raw.piscine_thalasso?.thalasso?.num_pompe_filtration ?? null,
       nettoyage_filtres: raw.piscine_thalasso?.thalasso?.nettoyage_filtres ?? null,

@@ -102,6 +102,19 @@
   }
 }
 
+/* ── Grilles responsive (pages modules) ─────────────────────────────────── */
+.grid-3-resp { grid-template-columns: repeat(3, 1fr); }
+.grid-2-resp { grid-template-columns: repeat(2, 1fr); }
+.kpi-5-resp  { grid-template-columns: repeat(5, 1fr); }
+.page-main   { padding: 24px 28px; }
+
+@media (max-width: 768px) {
+  .grid-3-resp { grid-template-columns: 1fr !important; }
+  .grid-2-resp { grid-template-columns: 1fr !important; }
+  .kpi-5-resp  { grid-template-columns: repeat(2, 1fr) !important; }
+  .page-main   { padding: 16px !important; }
+}
+
 /* Scrollbar discrète */
 ::-webkit-scrollbar {
   width: 5px;

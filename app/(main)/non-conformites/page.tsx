@@ -770,7 +770,7 @@ export default function NonConformitesPage() {
         </div>
 
         {/* ── KPIs ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10 }}>
+        <div style={{ display: "grid", gap: 10 }} className="kpi-5-resp">
           {[
             { label: "Ouvertes",  value: `${kpis.ouvertesTotal}`,     color: kpis.ouvertesTotal > 0 ? "#FF3B30" : "#34C759", icon: <AlertTriangle size={13} /> },
             { label: "Majeures",  value: `${kpis.majeuresOuvertes}`,  color: kpis.majeuresOuvertes > 0 ? "#FF3B30" : "#34C759", sub: "ouvertes" },

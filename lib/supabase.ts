@@ -1969,3 +1969,359 @@ export async function countSetControlesForPrestataire(prestataireId: string): Pr
   if (error) return 0;
   return count ?? 0;
 }
+
+// ─── REGISTRE SANITAIRE PISCINES ──────────────────────────────────────────────
+// Eau de mer — Piscine Hôtel + Piscine Thalasso uniquement.
+// Les données sont lues depuis les rondes (JSONB donnees).
+// La table registre_sanitaire sert uniquement à stocker les incidents.
+
+export type BassinId = "piscine_hotel" | "piscine_thalasso";
+
+export const BASSIN_LABELS: Record<BassinId, string> = {
+  piscine_hotel:   "Piscine Hôtel",
+  piscine_thalasso:"Piscine Thalasso",
+};
+
+// Seuil unique applicable : température thalasso ≤ 32°C (arrêté du 26 mai 2021)
+export const SEUIL_TEMP_THALASSO = 32;
+
+export function isTempThalassoOk(v: number | null): boolean {
+  return v === null || v <= SEUIL_TEMP_THALASSO;
+}
+
+// ── Données extraites depuis une ronde (lecture seule) ────────────────────────
+
+export type RondePoolRecord = {
+  ronde_id: string;
+  date: string;          // YYYY-MM-DD
+  heure: "matin" | "apres_midi";
+  technicien: string;
+  // Piscine Hôtel
+  hotel_temperature: number | null;
+  hotel_chlore: number | null;                  // niveau_chlore (L — litrage cuve)
+  hotel_concentration_chlore: number | null;    // concentration chlore (mg/L)
+  hotel_swan: "ok" | "nok" | null;
+  // Piscine Thalasso
+  thalasso_temperature: number | null;
+  thalasso_hypochlorite: number | null;         // litres en bâche
+  thalasso_concentration_chlore: number | null; // concentration chlore (mg/L)
+  thalasso_compteur: number | null;             // compteur remplissage
+  thalasso_nettoyage: "ok" | "nok" | null;
+  thalasso_swan: "ok" | "nok" | null;
+  // Conformité calculée
+  hotel_alerte: boolean;      // true si swan=nok ou concentration hors seuil
+  thalasso_alerte: boolean;   // true si temp>32°C, swan=nok ou concentration hors seuil
+};
+
+export async function fetchRondesPoolData(jours = 30): Promise<RondePoolRecord[]> {
+  const supabase = createClient();
+  const profile = await getCurrentUserProfile();
+  if (!profile) return [];
+
+  const since = new Date();
+  since.setDate(since.getDate() - jours);
+
+  const { data } = await supabase
+    .from("rondes")
+    .select("id, type, date_heure, validee, donnees, users(prenom)")
+    .eq("hotel_id", profile.hotel_id)
+    .eq("validee", true)
+    .gte("date_heure", since.toISOString())
+    .order("date_heure", { ascending: false });
+
+  if (!data) return [];
+
+  return data.map((row) => {
+    const d = (row.donnees ?? {}) as Record<string, Record<string, number | string | null>>;
+    const ph = d.piscine_hotel ?? {};
+    const pt = d.piscine_thalasso ?? {};
+    const heure = row.type === "ouverture" ? "matin" : "apres_midi";
+    const date = row.date_heure.slice(0, 10);
+
+    const thalassoTemp = (pt.temp_echange as number | null) ?? null;
+
+    const hotelConcChlore = (ph.concentration_chlore as number | null) ?? null;
+    const thalassoConcChlore = (pt.concentration_chlore as number | null) ?? null;
+    const CHLORE_MIN = 0.4;
+    const CHLORE_MAX = 1.4;
+    const isHotelChloreOk = hotelConcChlore === null || (hotelConcChlore >= CHLORE_MIN && hotelConcChlore <= CHLORE_MAX);
+    const isThalassoChloreOk = thalassoConcChlore === null || (thalassoConcChlore >= CHLORE_MIN && thalassoConcChlore <= CHLORE_MAX);
+
+    return {
+      ronde_id: row.id,
+      date,
+      heure,
+      technicien: (row.users as unknown as { prenom: string } | null)?.prenom ?? "—",
+      hotel_temperature: (ph.temperature as number | null) ?? null,
+      hotel_chlore:      (ph.niveau_chlore as number | null) ?? null,
+      hotel_concentration_chlore: hotelConcChlore,
+      hotel_swan:        (ph.controle_swan as "ok" | "nok" | null) ?? null,
+      thalasso_temperature:  thalassoTemp,
+      thalasso_hypochlorite: (pt.niveau_hypochlorite as number | null) ?? null,
+      thalasso_concentration_chlore: thalassoConcChlore,
+      thalasso_compteur:     (pt.compteur_remplissage as number | null) ?? null,
+      thalasso_nettoyage:    (pt.nettoyage_filtres as "ok" | "nok" | null) ?? null,
+      thalasso_swan:         (pt.controle_swan as "ok" | "nok" | null) ?? null,
+      hotel_alerte:   ph.controle_swan === "nok" || !isHotelChloreOk,
+      thalasso_alerte: !isTempThalassoOk(thalassoTemp) || pt.controle_swan === "nok" || !isThalassoChloreOk,
+    };
+  });
+}
+
+// ── Incidents manuels (table registre_sanitaire) ──────────────────────────────
+
+export type IncidentSanitaire = {
+  id: string;
+  date: string;
+  bassin: BassinId;
+  incident: string;
+  action_corrective: string | null;
+  technicien_nom: string | null;
+  created_at: string;
+};
+
+export async function fetchIncidentsSanitaires(jours = 30): Promise<IncidentSanitaire[]> {
+  const supabase = createClient();
+  const profile = await getCurrentUserProfile();
+  if (!profile) return [];
+
+  const since = new Date();
+  since.setDate(since.getDate() - jours);
+
+  const { data } = await supabase
+    .from("registre_sanitaire")
+    .select("id, date, bassin, incident, action_corrective, technicien_nom, created_at")
+    .eq("hotel_id", profile.hotel_id)
+    .not("incident", "is", null)
+    .gte("date", since.toISOString().slice(0, 10))
+    .order("date", { ascending: false });
+
+  if (!data) return [];
+  return data as IncidentSanitaire[];
+}
+
+// ── Dépenses & Factures ───────────────────────────────────────────────────────
+
+export type DepenseType = "facture_prestataire" | "achat_fournisseur" | "achat_magasin";
+
+export type Depense = {
+  id: string;
+  date: string;
+  type: DepenseType;
+  fournisseur: string;
+  description: string | null;
+  montant: number;
+  photo_url: string | null;
+  envoye_compta: boolean;
+  envoye_le: string | null;
+  created_at: string;
+};
+
+export async function fetchDepenses(): Promise<Depense[]> {
+  const supabase = createClient();
+  const profile = await getCurrentUserProfile();
+  if (!profile) return [];
+
+  const { data } = await supabase
+    .from("depenses")
+    .select("id, date, type, fournisseur, description, montant, photo_url, envoye_compta, envoye_le, created_at")
+    .eq("hotel_id", profile.hotel_id)
+    .order("date", { ascending: false });
+
+  if (!data) return [];
+  return data.map((row) => ({
+    id: row.id as string,
+    date: row.date as string,
+    type: row.type as DepenseType,
+    fournisseur: row.fournisseur as string,
+    description: (row.description as string | null) ?? null,
+    montant: Number(row.montant),
+    photo_url: (row.photo_url as string | null) ?? null,
+    envoye_compta: Boolean(row.envoye_compta),
+    envoye_le: (row.envoye_le as string | null) ?? null,
+    created_at: row.created_at as string,
+  }));
+}
+
+export async function createDepense(payload: {
+  date: string;
+  type: DepenseType;
+  fournisseur: string;
+  description?: string;
+  montant: number;
+  photo_url?: string;
+}): Promise<void> {
+  const supabase = createClient();
+  const profile = await getCurrentUserProfile();
+  if (!profile) throw new Error("Non authentifié");
+
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const { error } = await supabase.from("depenses").insert({
+    hotel_id: profile.hotel_id,
+    date: payload.date,
+    type: payload.type,
+    fournisseur: payload.fournisseur,
+    description: payload.description ?? null,
+    montant: payload.montant,
+    photo_url: payload.photo_url ?? null,
+    created_par: user?.id ?? null,
+  });
+
+  if (error) throw new Error(error.message);
+}
+
+export async function uploadDepensePhoto(file: File): Promise<string> {
+  const supabase = createClient();
+  const ext = file.name.split(".").pop() ?? "jpg";
+  const path = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+
+  const { error } = await supabase.storage.from("depenses").upload(path, file, {
+    contentType: file.type,
+    upsert: false,
+  });
+  if (error) throw new Error(error.message);
+
+  const { data: { publicUrl } } = supabase.storage.from("depenses").getPublicUrl(path);
+  return publicUrl;
+}
+
+export async function markDepensesEnvoyees(ids: string[]): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("depenses")
+    .update({ envoye_compta: true, envoye_le: new Date().toISOString() })
+    .in("id", ids);
+  if (error) throw new Error(error.message);
+}
+
+// ── Suivi Fuel ────────────────────────────────────────────────────────────────
+
+export type FuelReleveRecord = {
+  ronde_id: string;
+  date: string;    // YYYY-MM-DD
+  niveau: number;  // litres
+  technicien: string;
+};
+
+export type FuelLivraisonRecord = {
+  id: string;
+  date: string;
+  volume_livre: number;
+  prix_unitaire: number;
+  prix_total: number;
+  fournisseur: string | null;
+  notes: string | null;
+};
+
+export async function fetchFuelReleves(jours = 90): Promise<FuelReleveRecord[]> {
+  const supabase = createClient();
+  const profile = await getCurrentUserProfile();
+  if (!profile) return [];
+
+  const since = new Date();
+  since.setDate(since.getDate() - jours);
+
+  const { data } = await supabase
+    .from("rondes")
+    .select("id, date_heure, donnees, users(prenom)")
+    .eq("hotel_id", profile.hotel_id)
+    .eq("validee", true)
+    .gte("date_heure", since.toISOString())
+    .order("date_heure", { ascending: true });
+
+  if (!data) return [];
+
+  return data
+    .map((row) => {
+      const d = row.donnees as DonneesRonde | null;
+      const niveau = d?.niveau_fuel?.niveau_fuel ?? null;
+      if (niveau === null) return null;
+      return {
+        ronde_id: row.id as string,
+        date: (row.date_heure as string).slice(0, 10),
+        niveau: niveau as number,
+        technicien: (row.users as unknown as { prenom: string } | null)?.prenom ?? "—",
+      };
+    })
+    .filter((r): r is FuelReleveRecord => r !== null);
+}
+
+export async function fetchFuelLivraisons(): Promise<FuelLivraisonRecord[]> {
+  const supabase = createClient();
+  const profile = await getCurrentUserProfile();
+  if (!profile) return [];
+
+  const { data } = await supabase
+    .from("fuel_livraisons")
+    .select("id, date, volume_livre, prix_unitaire, prix_total, fournisseur, notes")
+    .eq("hotel_id", profile.hotel_id)
+    .order("date", { ascending: false });
+
+  if (!data) return [];
+
+  return data.map((row) => ({
+    id: row.id as string,
+    date: row.date as string,
+    volume_livre: row.volume_livre as number,
+    prix_unitaire: Number(row.prix_unitaire),
+    prix_total: Number(row.prix_total),
+    fournisseur: (row.fournisseur as string | null) ?? null,
+    notes: (row.notes as string | null) ?? null,
+  }));
+}
+
+export async function createFuelLivraison(payload: {
+  date: string;
+  volume_livre: number;
+  prix_unitaire: number;
+  fournisseur?: string;
+  notes?: string;
+}): Promise<void> {
+  const supabase = createClient();
+  const profile = await getCurrentUserProfile();
+  if (!profile) throw new Error("Non authentifié");
+
+  const { error } = await supabase.from("fuel_livraisons").insert({
+    hotel_id: profile.hotel_id,
+    date: payload.date,
+    volume_livre: payload.volume_livre,
+    prix_unitaire: payload.prix_unitaire,
+    fournisseur: payload.fournisseur ?? null,
+    notes: payload.notes ?? null,
+  });
+
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteFuelLivraison(id: string): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.from("fuel_livraisons").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+// ── Incidents manuels (table registre_sanitaire) ──────────────────────────────
+
+export async function createIncidentSanitaire(payload: {
+  date: string;
+  bassin: BassinId;
+  incident: string;
+  action_corrective: string;
+  technicien_nom: string;
+}): Promise<void> {
+  const supabase = createClient();
+  const profile = await getCurrentUserProfile();
+  if (!profile) throw new Error("Non authentifié");
+
+  const { error } = await supabase.from("registre_sanitaire").insert({
+    hotel_id: profile.hotel_id,
+    date: payload.date,
+    bassin: payload.bassin,
+    heure: "matin",
+    incident: payload.incident,
+    action_corrective: payload.action_corrective || null,
+    technicien_nom: payload.technicien_nom || null,
+    conforme: false,
+  });
+  if (error) throw new Error(error.message);
+}

@@ -19,6 +19,9 @@ import {
   Mail,
   ShieldCheck,
   BedDouble,
+  Droplets,
+  Fuel,
+  Receipt,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -52,6 +55,9 @@ const navSections: NavSection[] = [
       { href: "/equipements",  label: "Équipements",   icon: Wrench },
       { href: "/interventions",label: "Interventions", icon: Zap },
       { href: "/chambres",     label: "Chambres",      icon: BedDouble },
+      { href: "/piscine",      label: "Registre Sanitaire", icon: Droplets },
+      { href: "/fuel",         label: "Suivi Fuel",    icon: Fuel },
+      { href: "/depenses",     label: "Dépenses",      icon: Receipt },
       { href: "/rondes",       label: "Rondes",        icon: RefreshCw },
     ],
   },

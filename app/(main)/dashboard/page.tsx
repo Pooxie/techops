@@ -59,17 +59,8 @@ const card: React.CSSProperties = {
   overflow: "hidden",
 };
 
-const grid2: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0,1fr))",
-  gap: 12,
-};
-
-const grid3: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(3, minmax(0,1fr))",
-  gap: 12,
-};
+const grid2: React.CSSProperties = { display: "grid", gap: 12 };
+const grid3: React.CSSProperties = { display: "grid", gap: 12 };
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
 
@@ -425,7 +416,7 @@ export default function DashboardPage() {
         </div>
 
         {/* 3 KPI cards */}
-        <div style={grid3}>
+        <div style={grid3} className="grid-3-resp">
           {kpis === null ? Array.from({ length: 3 }).map((_, i) => (
             <div key={i} style={card}><Skel w="50%" h={10} /><div style={{ marginTop: 12 }}><Skel w="40%" h={36} r={6} /></div></div>
           )) : <>
@@ -452,7 +443,7 @@ export default function DashboardPage() {
         ════════════════════════════════════════ */}
         <Section label="Rondes" />
 
-        <div style={grid2}>
+        <div style={grid2} className="grid-2-resp">
           {/* Rondes du jour */}
           <div style={card}>
             <CardTitle icon={RefreshCw} title="Rondes du jour" href="/rondes" />
@@ -599,7 +590,7 @@ export default function DashboardPage() {
         ════════════════════════════════════════ */}
         <Section label="Coûts des non-conformités" />
 
-        <div style={grid2}>
+        <div style={grid2} className="grid-2-resp">
 
           {/* EXPL */}
           <div style={card}>
