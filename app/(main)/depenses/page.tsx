@@ -1,14 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, Send, Eye, X, Loader2, Check, Camera } from "lucide-react";
+import { Plus, Eye, X, Loader2, Check, Camera } from "lucide-react";
 import Header from "@/components/layout/Header";
 import {
   fetchDepenses,
   createDepense,
   uploadDepensePhoto,
-  markDepensesEnvoyees,
-  fetchCurrentUserSummary,
   type Depense,
   type DepenseType,
 } from "@/lib/supabase";
@@ -337,42 +335,6 @@ function DepenseModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
   );
 }
 
-// ── Confirmation envoi ────────────────────────────────────────────────────────
-
-function ConfirmEnvoiModal({
-  ids, total, sending,
-  onConfirm, onCancel,
-}: {
-  ids: string[]; total: number; sending: boolean;
-  onConfirm: () => void; onCancel: () => void;
-}) {
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ background: "#FFFFFF", borderRadius: 20, width: "100%", maxWidth: 420, margin: "0 16px", padding: "28px", boxShadow: "0 24px 48px rgba(0,0,0,0.18)" }}>
-        <div style={{ width: 48, height: 48, borderRadius: "50%", background: "#EFF6FF", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
-          <Send size={22} color="#2563EB" />
-        </div>
-        <h2 style={{ margin: "0 0 10px", fontSize: 17, fontWeight: 700, color: "#1D1D1F" }}>Confirmer l'envoi</h2>
-        <p style={{ margin: "0 0 22px", fontSize: 13, color: "#6E6E73", lineHeight: 1.6 }}>
-          Envoyer <strong style={{ color: "#1D1D1F" }}>{ids.length} document{ids.length > 1 ? "s" : ""}</strong> pour un total de{" "}
-          <strong style={{ color: "#1D1D1F" }}>{fmtEur(total)}</strong> à la comptable ?<br />
-          Les dépenses seront marquées comme envoyées.
-        </p>
-        <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={onCancel}
-            style={{ flex: 1, padding: 12, borderRadius: 12, border: "1px solid rgba(0,0,0,0.12)", background: "#F5F5F7", color: "#1D1D1F", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-            Annuler
-          </button>
-          <button onClick={onConfirm} disabled={sending}
-            style={{ flex: 2, padding: 12, borderRadius: 12, border: "none", background: "#2563EB", color: "#FFF", fontSize: 13, fontWeight: 700, cursor: sending ? "not-allowed" : "pointer", opacity: sending ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
-            {sending ? <><Loader2 size={14} className="animate-spin" /> Envoi en cours…</> : <><Send size={14} /> Envoyer l'email</>}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── Page principale ───────────────────────────────────────────────────────────
 
 export default function DepensesPage() {
@@ -382,18 +344,11 @@ export default function DepensesPage() {
   const [filtre, setFiltre]       = useState<Filtre>("toutes");
   const [showModal, setShowModal] = useState(false);
   const [lightbox, setLightbox]   = useState<string | null>(null);
-  const [sending, setSending]     = useState(false);
   const [toast, setToast]         = useState<string | null>(null);
-  const [confirmEnvoi, setConfirmEnvoi] = useState<{ ids: string[]; total: number } | null>(null);
-  const [techNom, setTechNom]     = useState("Technicien");
 
   const loadData = useCallback(async () => {
-    const [d, u] = await Promise.all([
-      fetchDepenses(),
-      fetchCurrentUserSummary().catch(() => null),
-    ]);
+    const d = await fetchDepenses();
     setDepenses(d);
-    if (u) setTechNom(`${u.prenom} ${u.nom}`);
     setLoading(false);
   }, []);
 
@@ -430,47 +385,6 @@ export default function DepensesPage() {
     setSelected(selected.size === displayed.length ? new Set() : new Set(displayed.map((d) => d.id)));
   }
 
-  // ── Envoi ────────────────────────────────────────────────────────────────────
-
-  function prepareEnvoi(ids: string[]) {
-    const total = depenses.filter((d) => ids.includes(d.id)).reduce((s, d) => s + d.montant, 0);
-    setConfirmEnvoi({ ids, total });
-  }
-
-  async function doEnvoi() {
-    if (!confirmEnvoi) return;
-    setSending(true);
-    try {
-      const toSend = depenses.filter((d) => confirmEnvoi.ids.includes(d.id));
-      const res = await fetch("/api/depenses/envoyer", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ depenses: toSend, technicienNom: techNom }),
-      });
-      const result = await res.json() as { ok?: boolean; error?: string };
-      if (!res.ok || result.error) throw new Error(result.error ?? "Erreur réseau");
-
-      await markDepensesEnvoyees(confirmEnvoi.ids);
-      setSelected(new Set());
-      setConfirmEnvoi(null);
-      await loadData();
-      setToast(`Email envoyé à la comptable ✓ (${confirmEnvoi.ids.length} doc${confirmEnvoi.ids.length > 1 ? "s" : ""})`);
-    } catch (err) {
-      setConfirmEnvoi(null);
-      setToast(`Erreur : ${err instanceof Error ? err.message : "Erreur inconnue"}`);
-    } finally {
-      setSending(false);
-    }
-  }
-
-  // ── Ids à envoyer ────────────────────────────────────────────────────────────
-
-  const selectedPending = [...selected].filter((id) => !depenses.find((d) => d.id === id)?.envoye_compta);
-  const envoyerIds = selected.size > 0 ? selectedPending : aEnvoyer.map((d) => d.id);
-  const envoyerLabel = selected.size > 0
-    ? `Envoyer ${selectedPending.length} sélectionné${selectedPending.length > 1 ? "s" : ""}`
-    : `Envoyer à la comptable${aEnvoyer.length > 0 ? ` (${aEnvoyer.length})` : ""}`;
-
   // ── Render ───────────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -497,16 +411,6 @@ export default function DepensesPage() {
             </p>
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button
-              onClick={() => {
-                if (envoyerIds.length === 0) { setToast("Aucune dépense à envoyer"); return; }
-                prepareEnvoi(envoyerIds);
-              }}
-              style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 16px", borderRadius: 12, border: "1px solid rgba(0,0,0,0.12)", background: "#FFFFFF", color: "#1D1D1F", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
-            >
-              <Send size={14} />
-              {envoyerLabel}
-            </button>
             <button
               onClick={() => setShowModal(true)}
               style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 18px", borderRadius: 12, border: "none", background: "#2563EB", color: "#FFF", fontSize: 13, fontWeight: 700, cursor: "pointer", boxShadow: "0 2px 8px rgba(37,99,235,0.28)" }}
@@ -637,15 +541,6 @@ export default function DepensesPage() {
         <DepenseModal onClose={() => setShowModal(false)} onCreated={() => void loadData()} />
       )}
       {lightbox && <Lightbox url={lightbox} onClose={() => setLightbox(null)} />}
-      {confirmEnvoi && (
-        <ConfirmEnvoiModal
-          ids={confirmEnvoi.ids}
-          total={confirmEnvoi.total}
-          sending={sending}
-          onConfirm={() => void doEnvoi()}
-          onCancel={() => setConfirmEnvoi(null)}
-        />
-      )}
       {toast && <Toast message={toast} onDone={() => setToast(null)} />}
     </div>
   );

@@ -2186,15 +2186,6 @@ export async function uploadDepensePhoto(file: File): Promise<string> {
   return publicUrl;
 }
 
-export async function markDepensesEnvoyees(ids: string[]): Promise<void> {
-  const supabase = createClient();
-  const { error } = await supabase
-    .from("depenses")
-    .update({ envoye_compta: true, envoye_le: new Date().toISOString() })
-    .in("id", ids);
-  if (error) throw new Error(error.message);
-}
-
 // ── Suivi Fuel ────────────────────────────────────────────────────────────────
 
 export type FuelReleveRecord = {
