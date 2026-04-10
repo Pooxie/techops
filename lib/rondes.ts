@@ -440,7 +440,7 @@ export const RONDE_SECTIONS: readonly RondeSectionConfig[] = [
     fields: [
       { id: "compresseur-mise-route", kind: "binary", label: "Mise en route", path: ["compresseur_air", "mise_en_route"], labels: { ok: "Oui", nok: "Non" } },
       { id: "compresseur-controle-huile", kind: "binary", label: "Contrôle huile", path: ["compresseur_air", "controle_huile"] },
-      { id: "compresseur-pression-spilotairs", kind: "number", label: "Pression circuit spilotairs", path: ["compresseur_air", "pression_spilotairs"], unit: "bar", threshold: { kind: "target", value: 1, tolerance: 0.05 }, trend: true },
+      { id: "compresseur-pression-spilotairs", kind: "number", label: "Pression circuit spilotairs", path: ["compresseur_air", "pression_spilotairs"], unit: "bar", threshold: { kind: "range", min: 1.8, max: 2.2 }, trend: true },
     ],
   },
   {
@@ -465,6 +465,7 @@ export const RONDE_SECTIONS: readonly RondeSectionConfig[] = [
       { id: "coffrets-emu-voyant", kind: "binary", label: "Coffret EMU — Contrôle voyants", path: ["coffrets", "emu_controle_voyant"] },
       { id: "coffrets-emu-uv", kind: "binary", label: "Coffret EMU — Contrôle UV désinfection", path: ["coffrets", "emu_controle_uv"] },
       { id: "coffrets-relevage-voyant", kind: "binary", label: "Coffret Relevage — Contrôle voyants", path: ["coffrets", "relevage_controle_voyant"] },
+      { id: "coffrets-puisard-voyant", kind: "binary", label: "Coffret Puisard — Contrôle voyants", path: ["coffrets", "puisard_controle_voyant"] },
     ],
   },
   {
@@ -529,7 +530,6 @@ export const RONDE_SECTIONS: readonly RondeSectionConfig[] = [
       { id: "filtration-emf-avant", kind: "number", label: "Pression AV filtre", path: ["filtration_emf", "pression_avant_filtre"], unit: "bar" },
       { id: "filtration-emf-apres", kind: "number", label: "Pression APRÈS filtre", path: ["filtration_emf", "pression_apres_filtre"], unit: "bar" },
       { id: "filtration-emf-swan", kind: "binary", label: "Contrôle SWAN", path: ["filtration_emf", "controle_swan"] },
-      { id: "filtration-emf-remplissage", kind: "number", label: "Compteur remplissage", path: ["filtration_emf", "compteur_remplissage"] },
     ],
   },
   {

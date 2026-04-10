@@ -48,7 +48,7 @@ function bassinMeasureFilledCount(m: BassinMeasure): number {
     .filter((v) => v !== null && v !== undefined).length;
 }
 
-const BASSIN_FIELDS_PER_SLOT = 6;
+const BASSIN_FIELDS_PER_SLOT = 6; // matin only
 
 // ── Toggle OK/NOK ─────────────────────────────────────────────────────────────
 
@@ -446,25 +446,18 @@ function BassinAccordionSection({
   isOpen,
   onToggle,
   onChangeMatin,
-  onChangeSoir,
 }: {
   config: BassinConfig;
   donnees: DonneesRonde;
   isOpen: boolean;
   onToggle: () => void;
   onChangeMatin: (field: keyof BassinMeasure, value: string | number | null) => void;
-  onChangeSoir: (field: keyof BassinMeasure, value: string | number | null) => void;
 }) {
   const matin = donnees[config.matinKey] as BassinMeasure;
-  const soir  = donnees[config.soirKey]  as BassinMeasure;
-  const matinAlert = !isTempBassinOk(config, matin.temperature) || !isCloreLibreOk(matin.chlore_libre) || !isChloreComibineOk(matin.chlore_combine);
-  const soirAlert  = !isTempBassinOk(config, soir.temperature)  || !isCloreLibreOk(soir.chlore_libre)  || !isChloreComibineOk(soir.chlore_combine);
-  const hasAlert = matinAlert || soirAlert;
+  const hasAlert = !isTempBassinOk(config, matin.temperature) || !isCloreLibreOk(matin.chlore_libre) || !isChloreComibineOk(matin.chlore_combine);
 
-  const filledMatin = bassinMeasureFilledCount(matin);
-  const filledSoir  = bassinMeasureFilledCount(soir);
-  const totalFields = BASSIN_FIELDS_PER_SLOT * 2;
-  const filled = filledMatin + filledSoir;
+  const filled = bassinMeasureFilledCount(matin);
+  const totalFields = BASSIN_FIELDS_PER_SLOT;
   const isComplete = filled === totalFields;
 
   const titleColor = hasAlert ? "#DC2626" : isComplete ? "#15803D" : "#1D1D1F";
@@ -511,10 +504,7 @@ function BassinAccordionSection({
 
       {isOpen && (
         <div style={{ padding: "0 16px 16px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-            <BassinColumn label="MATIN" measure={matin} config={config} onChange={onChangeMatin} />
-            <BassinColumn label="SOIR"  measure={soir}  config={config} onChange={onChangeSoir} />
-          </div>
+          <BassinColumn label="MATIN" measure={matin} config={config} onChange={onChangeMatin} />
         </div>
       )}
     </div>
@@ -619,9 +609,7 @@ export default function RondeFormPage() {
   const allBassinsComplete = useMemo(
     () => BASSINS_CONFIG.every((cfg) => {
       const m = donnees[cfg.matinKey] as BassinMeasure;
-      const s = donnees[cfg.soirKey] as BassinMeasure;
-      return bassinMeasureFilledCount(m) === BASSIN_FIELDS_PER_SLOT
-          && bassinMeasureFilledCount(s) === BASSIN_FIELDS_PER_SLOT;
+      return bassinMeasureFilledCount(m) === BASSIN_FIELDS_PER_SLOT;
     }),
     [donnees],
   );
@@ -775,7 +763,24 @@ export default function RondeFormPage() {
           </span>
         </div>
 
-        {/* Sections accordéon — données */}
+        {/* Section Régulation Bassins — en tête de formulaire */}
+        <div style={{ marginBottom: 8 }}>
+          <p style={{ margin: "0 0 8px 4px", fontSize: 11, fontWeight: 800, letterSpacing: "0.7px", textTransform: "uppercase", color: "#64748B" }}>
+            Régulation Bassins
+          </p>
+          {BASSINS_CONFIG.map((config) => (
+            <BassinAccordionSection
+              key={config.id}
+              config={config}
+              donnees={donnees}
+              isOpen={openSections.has(`bassin-${config.id}`)}
+              onToggle={() => toggleSection(`bassin-${config.id}`)}
+              onChangeMatin={(field, value) => handleBassinChange(config.matinKey, field, value)}
+            />
+          ))}
+        </div>
+
+        {/* Sections accordéon — données techniques */}
         {sections.map((section) => {
           const completed = sectionCompletedCount(section, donnees);
           const total = section.fields.length;
@@ -802,24 +807,6 @@ export default function RondeFormPage() {
             </AccordionSection>
           );
         })}
-
-        {/* Section Régulation Bassins */}
-        <div style={{ marginTop: 8 }}>
-          <p style={{ margin: "0 0 8px 4px", fontSize: 11, fontWeight: 800, letterSpacing: "0.7px", textTransform: "uppercase", color: "#64748B" }}>
-            Régulation Bassins
-          </p>
-          {BASSINS_CONFIG.map((config) => (
-            <BassinAccordionSection
-              key={config.id}
-              config={config}
-              donnees={donnees}
-              isOpen={openSections.has(`bassin-${config.id}`)}
-              onToggle={() => toggleSection(`bassin-${config.id}`)}
-              onChangeMatin={(field, value) => handleBassinChange(config.matinKey, field, value)}
-              onChangeSoir={(field, value) => handleBassinChange(config.soirKey, field, value)}
-            />
-          ))}
-        </div>
 
         {/* Anomalies warning */}
         {anomalyCount > 0 ? (
@@ -924,33 +911,19 @@ export default function RondeFormPage() {
             {exportingPdf ? "Génération du PDF…" : "Télécharger le récap PDF"}
           </button>
 
-          {allComplete && (
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={submitting}
-              style={{
-                ...primaryButton,
-                backgroundColor: submitting ? "#9CA3AF" : "#2563EB",
-                boxShadow: submitting ? "none" : primaryButton.boxShadow,
-                cursor: submitting ? "not-allowed" : "pointer",
-              }}
-            >
-              {submitting ? "Sauvegarde en cours…" : "Valider la ronde"}
-            </button>
-          )}
-
-          {!allComplete && (
-            <div style={{
-              padding: "14px 16px", borderRadius: 14,
-              border: "1px solid rgba(0,0,0,0.08)", backgroundColor: "#F5F5F7",
-              textAlign: "center",
-            }}>
-              <p style={{ margin: 0, fontSize: 14, color: "#8E8E93" }}>
-                Complétez toutes les sections pour valider la ronde
-              </p>
-            </div>
-          )}
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={submitting}
+            style={{
+              ...primaryButton,
+              backgroundColor: submitting ? "#9CA3AF" : "#2563EB",
+              boxShadow: submitting ? "none" : primaryButton.boxShadow,
+              cursor: submitting ? "not-allowed" : "pointer",
+            }}
+          >
+            {submitting ? "Sauvegarde en cours…" : "Valider la ronde"}
+          </button>
         </div>
       </div>
     </div>
