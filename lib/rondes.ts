@@ -1,5 +1,23 @@
 export type OkNok = "ok" | "nok" | null;
 export type RondeType = "ouverture" | "fermeture";
+export type Transparence = "TB" | "B" | "M" | null;
+
+export type BassinMeasure = {
+  heure: string | null;
+  transparence: Transparence;
+  temperature: number | null;
+  chlore_libre: number | null;
+  chlore_total: number | null;
+  chlore_combine: number | null;
+};
+
+export type BassinKey =
+  | "piscine_hotel_matin"
+  | "piscine_hotel_soir"
+  | "piscine_institut_matin"
+  | "piscine_institut_soir"
+  | "pataugeoire_matin"
+  | "pataugeoire_soir";
 
 export type DonneesRonde = {
   piscine_hotel: {
@@ -115,6 +133,12 @@ export type DonneesRonde = {
   niveau_fuel: {
     niveau_fuel: number | null;
   };
+  piscine_hotel_matin: BassinMeasure;
+  piscine_hotel_soir: BassinMeasure;
+  piscine_institut_matin: BassinMeasure;
+  piscine_institut_soir: BassinMeasure;
+  pataugeoire_matin: BassinMeasure;
+  pataugeoire_soir: BassinMeasure;
 };
 
 export const DONNEES_DEFAULT: DonneesRonde = {
@@ -231,6 +255,12 @@ export const DONNEES_DEFAULT: DonneesRonde = {
   niveau_fuel: {
     niveau_fuel: null,
   },
+  piscine_hotel_matin:    { heure: null, transparence: null, temperature: null, chlore_libre: null, chlore_total: null, chlore_combine: null },
+  piscine_hotel_soir:     { heure: null, transparence: null, temperature: null, chlore_libre: null, chlore_total: null, chlore_combine: null },
+  piscine_institut_matin: { heure: null, transparence: null, temperature: null, chlore_libre: null, chlore_total: null, chlore_combine: null },
+  piscine_institut_soir:  { heure: null, transparence: null, temperature: null, chlore_libre: null, chlore_total: null, chlore_combine: null },
+  pataugeoire_matin:      { heure: null, transparence: null, temperature: null, chlore_libre: null, chlore_total: null, chlore_combine: null },
+  pataugeoire_soir:       { heure: null, transparence: null, temperature: null, chlore_libre: null, chlore_total: null, chlore_combine: null },
 };
 
 type ThresholdConfig =
@@ -889,6 +919,12 @@ function mapLegacyToNew(raw: LegacyDonneesRonde): DonneesRonde {
     niveau_fuel: {
       niveau_fuel: raw.chaufferie_ecs?.dry_cooling?.niveau_fuel ?? null,
     },
+    piscine_hotel_matin:    { heure: null, transparence: null, temperature: null, chlore_libre: null, chlore_total: null, chlore_combine: null },
+    piscine_hotel_soir:     { heure: null, transparence: null, temperature: null, chlore_libre: null, chlore_total: null, chlore_combine: null },
+    piscine_institut_matin: { heure: null, transparence: null, temperature: null, chlore_libre: null, chlore_total: null, chlore_combine: null },
+    piscine_institut_soir:  { heure: null, transparence: null, temperature: null, chlore_libre: null, chlore_total: null, chlore_combine: null },
+    pataugeoire_matin:      { heure: null, transparence: null, temperature: null, chlore_libre: null, chlore_total: null, chlore_combine: null },
+    pataugeoire_soir:       { heure: null, transparence: null, temperature: null, chlore_libre: null, chlore_total: null, chlore_combine: null },
   };
 }
 
@@ -900,4 +936,40 @@ export function normalizeDonneesRonde(raw: unknown): DonneesRonde {
     return deepMerge(cloneDefaultDonnees(), mapLegacyToNew(raw as LegacyDonneesRonde));
   }
   return cloneDefaultDonnees();
+}
+
+// ── Configuration des 3 bassins sanitaires ────────────────────────────────────
+
+export type BassinConfig = {
+  id: string;
+  label: string;
+  matinKey: BassinKey;
+  soirKey: BassinKey;
+  tempRange?: { min: number; max: number };
+  tempMax?: number;
+};
+
+export const BASSINS_CONFIG: BassinConfig[] = [
+  { id: "piscine_hotel",    label: "Piscine Hôtel",          matinKey: "piscine_hotel_matin",    soirKey: "piscine_hotel_soir",    tempRange: { min: 24, max: 30 } },
+  { id: "piscine_institut", label: "Piscine Institut / SPA",  matinKey: "piscine_institut_matin", soirKey: "piscine_institut_soir", tempMax: 32 },
+  { id: "pataugeoire",      label: "Pataugeoire",             matinKey: "pataugeoire_matin",      soirKey: "pataugeoire_soir",      tempRange: { min: 24, max: 30 } },
+];
+
+export function isTempBassinOk(config: BassinConfig, v: number | null): boolean {
+  if (v === null) return true;
+  if (config.tempMax !== undefined) return v <= config.tempMax;
+  if (config.tempRange !== undefined) return v >= config.tempRange.min && v <= config.tempRange.max;
+  return true;
+}
+
+export function isCloreLibreOk(v: number | null): boolean {
+  return v === null || (v >= 0.4 && v <= 1.4);
+}
+
+export function isChloreComibineOk(v: number | null): boolean {
+  return v === null || v < 0.6;
+}
+
+export function bassinMeasureHasAlert(config: BassinConfig, m: BassinMeasure): boolean {
+  return !isTempBassinOk(config, m.temperature) || !isCloreLibreOk(m.chlore_libre) || !isChloreComibineOk(m.chlore_combine);
 }

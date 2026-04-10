@@ -2068,6 +2068,106 @@ export async function fetchRondesPoolData(jours = 30): Promise<RondePoolRecord[]
   });
 }
 
+// ── Nouvelle structure 3 bassins (carnet sanitaire Sofitel) ──────────────────
+
+export type NewBassinId = "piscine_hotel" | "piscine_institut" | "pataugeoire";
+
+export const NEW_BASSIN_LABELS: Record<NewBassinId, string> = {
+  piscine_hotel:    "Piscine Hôtel",
+  piscine_institut: "Piscine Institut / SPA",
+  pataugeoire:      "Pataugeoire",
+};
+
+export type BassinRecord = {
+  ronde_id: string;
+  date: string;
+  technicien: string;
+  bassin: NewBassinId;
+  matin_heure: string | null;
+  matin_transparence: "TB" | "B" | "M" | null;
+  matin_temperature: number | null;
+  matin_chlore_libre: number | null;
+  matin_chlore_total: number | null;
+  matin_chlore_combine: number | null;
+  soir_heure: string | null;
+  soir_transparence: "TB" | "B" | "M" | null;
+  soir_temperature: number | null;
+  soir_chlore_libre: number | null;
+  soir_chlore_total: number | null;
+  soir_chlore_combine: number | null;
+  alerte: boolean;
+};
+
+export async function fetchBassinRecords(jours = 30): Promise<BassinRecord[]> {
+  const supabase = createClient();
+  const profile = await getCurrentUserProfile();
+  if (!profile) return [];
+
+  const since = new Date();
+  since.setDate(since.getDate() - jours);
+
+  const { data } = await supabase
+    .from("rondes")
+    .select("id, date_heure, validee, donnees, users(prenom)")
+    .eq("hotel_id", profile.hotel_id)
+    .eq("validee", true)
+    .gte("date_heure", since.toISOString())
+    .order("date_heure", { ascending: false });
+
+  if (!data) return [];
+
+  function isCloreLibreOk(v: number | null) { return v === null || (v >= 0.4 && v <= 1.4); }
+  function isCombineOk(v: number | null) { return v === null || v < 0.6; }
+  function isTempHotelOk(v: number | null) { return v === null || (v >= 24 && v <= 30); }
+  function isTempInstitutOk(v: number | null) { return v === null || v <= 32; }
+
+  const bassins: NewBassinId[] = ["piscine_hotel", "piscine_institut", "pataugeoire"];
+  const records: BassinRecord[] = [];
+
+  for (const row of data) {
+    const d = (row.donnees ?? {}) as Record<string, Record<string, unknown>>;
+    const date = row.date_heure.slice(0, 10);
+    const technicien = (row.users as unknown as { prenom: string } | null)?.prenom ?? "—";
+
+    for (const bassin of bassins) {
+      const m = (d[`${bassin}_matin`] ?? {}) as Record<string, unknown>;
+      const s = (d[`${bassin}_soir`]  ?? {}) as Record<string, unknown>;
+      const isTempOk = bassin === "piscine_institut" ? isTempInstitutOk : isTempHotelOk;
+
+      const mClLibre   = (m.chlore_libre    as number | null) ?? null;
+      const mClCombine = (m.chlore_combine  as number | null) ?? null;
+      const mTemp      = (m.temperature     as number | null) ?? null;
+      const sClLibre   = (s.chlore_libre    as number | null) ?? null;
+      const sClCombine = (s.chlore_combine  as number | null) ?? null;
+      const sTemp      = (s.temperature     as number | null) ?? null;
+
+      records.push({
+        ronde_id: row.id,
+        date,
+        technicien,
+        bassin,
+        matin_heure:          (m.heure         as string | null) ?? null,
+        matin_transparence:   (m.transparence   as "TB" | "B" | "M" | null) ?? null,
+        matin_temperature:    mTemp,
+        matin_chlore_libre:   mClLibre,
+        matin_chlore_total:   (m.chlore_total   as number | null) ?? null,
+        matin_chlore_combine: mClCombine,
+        soir_heure:           (s.heure          as string | null) ?? null,
+        soir_transparence:    (s.transparence    as "TB" | "B" | "M" | null) ?? null,
+        soir_temperature:     sTemp,
+        soir_chlore_libre:    sClLibre,
+        soir_chlore_total:    (s.chlore_total    as number | null) ?? null,
+        soir_chlore_combine:  sClCombine,
+        alerte:
+          !isCloreLibreOk(mClLibre) || !isCombineOk(mClCombine) || !isTempOk(mTemp) ||
+          !isCloreLibreOk(sClLibre) || !isCombineOk(sClCombine) || !isTempOk(sTemp),
+      });
+    }
+  }
+
+  return records;
+}
+
 // ── Incidents manuels (table registre_sanitaire) ──────────────────────────────
 
 export type IncidentSanitaire = {

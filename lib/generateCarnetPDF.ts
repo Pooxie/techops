@@ -2,11 +2,9 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import {
   BASSIN_LABELS,
-  SEUIL_TEMP_THALASSO,
-  isTempThalassoOk,
-  type RondePoolRecord,
+  NEW_BASSIN_LABELS,
+  type BassinRecord,
   type IncidentSanitaire,
-  type BassinId,
 } from "@/lib/supabase";
 
 // ── Couleurs ──────────────────────────────────────────────────────────────────
@@ -62,16 +60,47 @@ function fmtDate(iso: string) {
 
 // ── Export principal ──────────────────────────────────────────────────────────
 
+type BassinPDFId = "piscine_hotel" | "piscine_institut" | "pataugeoire";
+
+const BASSIN_PDF_COLORS: Record<BassinPDFId, [number,number,number]> = {
+  piscine_hotel:    BLUE,
+  piscine_institut: CYAN,
+  pataugeoire:      [22, 163, 74],
+};
+
+const BASSIN_PDF_SUBTITLES: Record<BassinPDFId, string> = {
+  piscine_hotel:    "Eau de mer · Chlore libre 0,4–1,4 mg/L · Chlore combiné < 0,6 mg/L · T° 24–30°C",
+  piscine_institut: "Eau de mer · Chlore libre 0,4–1,4 mg/L · Chlore combiné < 0,6 mg/L · T° ≤ 32°C",
+  pataugeoire:      "Eau de mer · Chlore libre 0,4–1,4 mg/L · Chlore combiné < 0,6 mg/L · T° 24–30°C",
+};
+
+function clLibreAlert(v: number | null) { return v !== null && (v < 0.4 || v > 1.4); }
+function clCombineAlert(v: number | null) { return v !== null && v >= 0.6; }
+
+function addSignatureLine(doc: jsPDF, y: number) {
+  const w = doc.internal.pageSize.width;
+  const sh = Math.min(y, doc.internal.pageSize.height - 35);
+  doc.setDrawColor(...SOFT);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(...SOFT);
+  doc.line(14, sh, 80, sh);
+  doc.text("Signature du technicien responsable", 14, sh + 5);
+  doc.line(w - 80, sh, w - 14, sh);
+  doc.text("Visa responsable technique", w - 80, sh + 5);
+}
+
 export async function generateCarnetPDF(
-  records: RondePoolRecord[],
+  records: BassinRecord[],
   incidents: IncidentSanitaire[]
 ): Promise<void> {
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
   const w = doc.internal.pageSize.width;
   let y = 0;
 
-  const mois = records.length > 0
-    ? new Date(records[0].date).toLocaleDateString("fr-FR", { month: "long", year: "numeric" })
+  const allDates = records.map((r) => r.date).sort();
+  const mois = allDates.length > 0
+    ? new Date(allDates[0]).toLocaleDateString("fr-FR", { month: "long", year: "numeric" })
     : new Date().toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
   const moisLabel = mois.charAt(0).toUpperCase() + mois.slice(1);
 
@@ -90,7 +119,7 @@ export async function generateCarnetPDF(
 
   doc.setFontSize(8);
   doc.text("Conforme à l'arrêté du 26 mai 2021 — Art. D.1332-10 Code de la Santé Publique", 14, 28);
-  doc.text("Bassins eau de mer — Piscine Hôtel (chlore) · Piscine Thalasso (UV + hypochlorite)", 14, 34);
+  doc.text("3 bassins : Piscine Hôtel · Piscine Institut/SPA · Pataugeoire — Relevés MATIN & SOIR", 14, 34);
   doc.text(`Période : ${moisLabel}  ·  Généré le : ${new Date().toLocaleDateString("fr-FR")}`, 14, 40);
 
   doc.setFont("helvetica", "bold");
@@ -100,16 +129,17 @@ export async function generateCarnetPDF(
   y = 54;
 
   // ── Rappel seuils ────────────────────────────────────────────────────────────
-  y = secHeader(doc, y, "Seuils réglementaires applicables — Arrêté du 26 mai 2021");
+  y = secHeader(doc, y, "Seuils réglementaires — Arrêté du 26 mai 2021 (Art. D.1332-10 CSP)");
 
   autoTable(doc, {
     startY: y,
     head: [["Paramètre", "Seuil", "Unité", "Bassin concerné", "Référence"]],
     body: [
-      ["Température", `≤ ${SEUIL_TEMP_THALASSO}°C`, "°C", "Piscine Thalasso", "Art. D.1332-3 CSP"],
-      ["Transparence", "Bonne obligatoire", "—", "Tous bassins", "Art. D.1332-3 CSP"],
-      ["pH (contrôle ARS)", "6,9 — 7,7", "—", "Prélèvements ARS mensuels", "Art. D.1332-3 CSP"],
-      ["Bactériologie", "Normes ARS", "UFC/100mL", "Prélèvements ARS mensuels", "Art. D.1332-3 CSP"],
+      ["Chlore libre", "0,4 — 1,4", "mg/L", "Tous bassins", "Art. D.1332-3 CSP"],
+      ["Chlore combiné", "< 0,6", "mg/L", "Tous bassins", "Art. D.1332-3 CSP"],
+      ["Température", "24–30°C (Hôtel/Pata.) / ≤ 32°C (Institut)", "°C", "Tous bassins", "Art. D.1332-3 CSP"],
+      ["Transparence", "Bonne (TB) obligatoire", "—", "Tous bassins", "Art. D.1332-3 CSP"],
+      ["pH (contrôle ARS)", "6,9 — 7,7", "—", "Prélèvements ARS", "Art. D.1332-3 CSP"],
     ],
     margin: { left: 14, right: 14 },
     styles: { fontSize: 8, cellPadding: 3, textColor: INK, font: "helvetica" },
@@ -123,17 +153,16 @@ export async function generateCarnetPDF(
   // ── Résumé ───────────────────────────────────────────────────────────────────
   y = secHeader(doc, y, "Résumé de la période");
 
-  const bassins: BassinId[] = ["piscine_hotel", "piscine_thalasso"];
+  const bassins: BassinPDFId[] = ["piscine_hotel", "piscine_institut", "pataugeoire"];
   const summaryRows = bassins.map((b) => {
-    const alertes = b === "piscine_hotel"
-      ? records.filter((r) => r.hotel_alerte).length
-      : records.filter((r) => r.thalasso_alerte).length;
-    return [BASSIN_LABELS[b], String(records.length), String(records.length - alertes), String(alertes)];
+    const bRecs = records.filter((r) => r.bassin === b);
+    const alertes = bRecs.filter((r) => r.alerte).length;
+    return [NEW_BASSIN_LABELS[b], String(bRecs.length), String(bRecs.length - alertes), String(alertes)];
   });
 
   autoTable(doc, {
     startY: y,
-    head: [["Bassin", "Rondes enregistrées", "Sans alerte", "Alertes"]],
+    head: [["Bassin", "Mesures enregistrées", "Sans alerte", "Alertes"]],
     body: summaryRows,
     margin: { left: 14, right: 14 },
     styles: { fontSize: 8, cellPadding: 3, textColor: INK, font: "helvetica" },
@@ -141,147 +170,86 @@ export async function generateCarnetPDF(
     theme: "plain",
   });
 
-  // ── PAGE 2 — PISCINE HÔTEL ──────────────────────────────────────────────────
-  doc.addPage();
-  y = 14;
+  // ── PAGES 2-4 — UN TABLEAU PAR BASSIN ───────────────────────────────────────
+  const HEAD = [
+    "Date",
+    "Heure M", "Cl libre M", "Cl total M", "Cl combiné M", "Temp M",
+    "Heure S", "Cl libre S", "Cl total S", "Cl combiné S", "Temp S",
+    "Transparence", "Conforme",
+  ];
 
-  y = secHeader(doc, y, "Piscine Hôtel — Eau de mer · Traitement chlore");
+  const COL_W = {
+    0: { cellWidth: 22 },   // Date
+    1: { cellWidth: 15 },   // Heure M
+    2: { cellWidth: 18 },   // Cl libre M
+    3: { cellWidth: 18 },   // Cl total M
+    4: { cellWidth: 18 },   // Cl combiné M
+    5: { cellWidth: 16 },   // Temp M
+    6: { cellWidth: 15 },   // Heure S
+    7: { cellWidth: 18 },   // Cl libre S
+    8: { cellWidth: 18 },   // Cl total S
+    9: { cellWidth: 18 },   // Cl combiné S
+    10: { cellWidth: 16 },  // Temp S
+    11: { cellWidth: 20 },  // Transparence
+    // 12: Conforme auto
+  };
 
-  const hotelSorted = [...records].sort((a, b) => a.date.localeCompare(b.date));
-  const hotelRows = hotelSorted.map((r) => {
-    const cc = r.hotel_concentration_chlore;
-    return [
+  for (const bassin of bassins) {
+    doc.addPage();
+    y = 14;
+
+    const color = BASSIN_PDF_COLORS[bassin];
+    y = secHeader(doc, y, `${NEW_BASSIN_LABELS[bassin].toUpperCase()} — ${BASSIN_PDF_SUBTITLES[bassin]}`, color);
+
+    const sorted = records.filter((r) => r.bassin === bassin).sort((a, b) => a.date.localeCompare(b.date));
+
+    const rows = sorted.map((r) => [
       fmtDate(r.date),
-      r.heure === "matin" ? "Matin" : "Après-midi",
-      r.hotel_temperature !== null ? `${r.hotel_temperature}°C` : "—",
-      r.hotel_chlore !== null ? `${r.hotel_chlore} L` : "—",
-      cc !== null ? `${cc} mg/L` : "—",
-      r.hotel_swan ?? "—",
-      r.technicien,
-      r.hotel_alerte ? "⚠ Alerte" : "✓ OK",
-    ];
-  });
+      r.matin_heure ?? "—",
+      r.matin_chlore_libre  !== null ? `${r.matin_chlore_libre} mg/L`  : "—",
+      r.matin_chlore_total  !== null ? `${r.matin_chlore_total} mg/L`  : "—",
+      r.matin_chlore_combine !== null ? `${r.matin_chlore_combine} mg/L` : "—",
+      r.matin_temperature !== null ? `${r.matin_temperature}°C` : "—",
+      r.soir_heure ?? "—",
+      r.soir_chlore_libre   !== null ? `${r.soir_chlore_libre} mg/L`   : "—",
+      r.soir_chlore_total   !== null ? `${r.soir_chlore_total} mg/L`   : "—",
+      r.soir_chlore_combine  !== null ? `${r.soir_chlore_combine} mg/L`  : "—",
+      r.soir_temperature  !== null ? `${r.soir_temperature}°C`  : "—",
+      r.soir_transparence ?? r.matin_transparence ?? "—",
+      r.alerte ? "⚠ Alerte" : "✓ OK",
+    ]);
 
-  autoTable(doc, {
-    startY: y,
-    head: [["Date", "Moment", "Température", "Chlore (L)", "Chlore (mg/L)", "SWAN", "Technicien", "Statut"]],
-    body: hotelRows,
-    margin: { left: 14, right: 14 },
-    styles: { fontSize: 8, cellPadding: 2.5, textColor: INK, font: "helvetica" },
-    headStyles: { fillColor: BLUE, textColor: WHITE, fontStyle: "bold", fontSize: 8 },
-    columnStyles: { 0: { cellWidth: 24 }, 1: { cellWidth: 20 }, 2: { cellWidth: 26 }, 3: { cellWidth: 22 }, 4: { cellWidth: 26 }, 5: { cellWidth: 18 }, 6: { cellWidth: 32 } },
-    theme: "plain",
-    didParseCell: (data) => {
-      if (data.section !== "body") return;
-      const r = hotelSorted[data.row.index];
-      if (!r) return;
-      if (r.hotel_alerte) {
-        data.cell.styles.fillColor = RED_BG;
-      } else {
-        data.cell.styles.fillColor = data.row.index % 2 === 0 ? WHITE : GRAY;
-      }
-      // Concentration chlore hors seuil en rouge
-      if (data.column.index === 4) {
-        const cc = r.hotel_concentration_chlore;
-        if (cc !== null && (cc < 0.4 || cc > 1.4)) {
-          data.cell.styles.textColor = RED_FG;
-          data.cell.styles.fontStyle = "bold";
-        }
-      }
-      if (data.column.index === 7) {
-        data.cell.styles.textColor = r.hotel_alerte ? RED_FG : GRN_FG;
-        data.cell.styles.fontStyle = "bold";
-      }
-    },
-  });
+    autoTable(doc, {
+      startY: y,
+      head: [HEAD],
+      body: rows,
+      margin: { left: 14, right: 14 },
+      styles: { fontSize: 7, cellPadding: 2, textColor: INK, font: "helvetica" },
+      headStyles: { fillColor: color, textColor: WHITE, fontStyle: "bold", fontSize: 7 },
+      columnStyles: COL_W,
+      theme: "plain",
+      didParseCell: (data) => {
+        if (data.section !== "body") return;
+        const r = sorted[data.row.index];
+        if (!r) return;
+        data.cell.styles.fillColor = r.alerte ? RED_BG : (data.row.index % 2 === 0 ? WHITE : GRAY);
+        // Chlore libre M (col 2)
+        if (data.column.index === 2 && clLibreAlert(r.matin_chlore_libre)) { data.cell.styles.textColor = RED_FG; data.cell.styles.fontStyle = "bold"; }
+        // Chlore combiné M (col 4)
+        if (data.column.index === 4 && clCombineAlert(r.matin_chlore_combine)) { data.cell.styles.textColor = RED_FG; data.cell.styles.fontStyle = "bold"; }
+        // Chlore libre S (col 7)
+        if (data.column.index === 7 && clLibreAlert(r.soir_chlore_libre)) { data.cell.styles.textColor = RED_FG; data.cell.styles.fontStyle = "bold"; }
+        // Chlore combiné S (col 9)
+        if (data.column.index === 9 && clCombineAlert(r.soir_chlore_combine)) { data.cell.styles.textColor = RED_FG; data.cell.styles.fontStyle = "bold"; }
+        // Statut (col 12)
+        if (data.column.index === 12) { data.cell.styles.textColor = r.alerte ? RED_FG : GRN_FG; data.cell.styles.fontStyle = "bold"; }
+      },
+    });
 
-  y = lastY(doc) + 14;
+    addSignatureLine(doc, lastY(doc) + 14);
+  }
 
-  // Zone signature
-  doc.setDrawColor(...SOFT);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(...SOFT);
-  const sh = Math.min(y, doc.internal.pageSize.height - 35);
-  doc.line(14, sh, 80, sh);
-  doc.text("Signature du technicien responsable", 14, sh + 5);
-  doc.line(w - 80, sh, w - 14, sh);
-  doc.text("Visa responsable technique", w - 80, sh + 5);
-
-  // ── PAGE 3 — PISCINE THALASSO ───────────────────────────────────────────────
-  doc.addPage();
-  y = 14;
-
-  y = secHeader(doc, y, "Piscine Thalasso — Eau de mer · Traitement UV + hypochlorite · Temp max 32°C", CYAN);
-
-  const thalassoSorted = [...records].sort((a, b) => a.date.localeCompare(b.date));
-  const thalassoRows = thalassoSorted.map((r) => {
-    const cc = r.thalasso_concentration_chlore;
-    return [
-      fmtDate(r.date),
-      r.heure === "matin" ? "Matin" : "Après-midi",
-      r.thalasso_temperature !== null ? `${r.thalasso_temperature}°C` : "—",
-      r.thalasso_hypochlorite !== null ? `${r.thalasso_hypochlorite} L` : "—",
-      cc !== null ? `${cc} mg/L` : "—",
-      r.thalasso_compteur !== null ? `${r.thalasso_compteur} m³` : "—",
-      r.thalasso_nettoyage ?? "—",
-      r.thalasso_swan ?? "—",
-      r.technicien,
-      r.thalasso_alerte ? "⚠ Alerte" : "✓ OK",
-    ];
-  });
-
-  autoTable(doc, {
-    startY: y,
-    head: [["Date", "Moment", "Température", "Hypochlorite (L)", "Chlore (mg/L)", "Compteur", "Filtres", "SWAN", "Technicien", "Statut"]],
-    body: thalassoRows,
-    margin: { left: 14, right: 14 },
-    styles: { fontSize: 8, cellPadding: 2.5, textColor: INK, font: "helvetica" },
-    headStyles: { fillColor: CYAN, textColor: WHITE, fontStyle: "bold", fontSize: 8 },
-    columnStyles: { 0: { cellWidth: 22 }, 1: { cellWidth: 18 }, 2: { cellWidth: 24 }, 3: { cellWidth: 24 }, 4: { cellWidth: 24 }, 5: { cellWidth: 20 }, 6: { cellWidth: 14 }, 7: { cellWidth: 14 } },
-    theme: "plain",
-    didParseCell: (data) => {
-      if (data.section !== "body") return;
-      const r = thalassoSorted[data.row.index];
-      if (!r) return;
-      if (r.thalasso_alerte) {
-        data.cell.styles.fillColor = RED_BG;
-      } else {
-        data.cell.styles.fillColor = data.row.index % 2 === 0 ? WHITE : GRAY;
-      }
-      // Température hors seuil en rouge
-      if (data.column.index === 2 && !isTempThalassoOk(r.thalasso_temperature)) {
-        data.cell.styles.textColor = RED_FG;
-        data.cell.styles.fontStyle = "bold";
-      }
-      // Concentration chlore hors seuil en rouge
-      if (data.column.index === 4) {
-        const cc = r.thalasso_concentration_chlore;
-        if (cc !== null && (cc < 0.4 || cc > 1.4)) {
-          data.cell.styles.textColor = RED_FG;
-          data.cell.styles.fontStyle = "bold";
-        }
-      }
-      if (data.column.index === 9) {
-        data.cell.styles.textColor = r.thalasso_alerte ? RED_FG : GRN_FG;
-        data.cell.styles.fontStyle = "bold";
-      }
-    },
-  });
-
-  y = lastY(doc) + 14;
-
-  const sh2 = Math.min(y, doc.internal.pageSize.height - 35);
-  doc.setDrawColor(...SOFT);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(...SOFT);
-  doc.line(14, sh2, 80, sh2);
-  doc.text("Signature du technicien responsable", 14, sh2 + 5);
-  doc.line(w - 80, sh2, w - 14, sh2);
-  doc.text("Visa responsable technique", w - 80, sh2 + 5);
-
-  // ── PAGE 4 — INCIDENTS (si nécessaire) ─────────────────────────────────────
+  // ── PAGE INCIDENTS ────────────────────────────────────────────────────────────
   if (incidents.length > 0) {
     doc.addPage();
     y = 14;

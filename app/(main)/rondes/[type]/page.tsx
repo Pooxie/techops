@@ -14,9 +14,17 @@ import {
   getVisibleRondeSections,
   sectionHasAlert,
   setFieldValue,
+  BASSINS_CONFIG,
+  isTempBassinOk,
+  isCloreLibreOk,
+  isChloreComibineOk,
   type DonneesRonde,
   type OkNok,
   type RondeFieldConfig,
+  type BassinMeasure,
+  type BassinKey,
+  type BassinConfig,
+  type Transparence,
 } from "@/lib/rondes";
 
 function BinaryToggle({
@@ -200,6 +208,161 @@ function SectionCard({
   );
 }
 
+// ── Transparence toggle (TB / B / M) ──────────────────────────────────────────
+
+function TransparenceToggle({
+  value,
+  onChange,
+}: {
+  value: Transparence;
+  onChange: (v: Transparence) => void;
+}) {
+  const options: { v: NonNullable<Transparence>; label: string; color: string; bg: string }[] = [
+    { v: "TB", label: "TB",  color: "#15803D", bg: "#F0FDF4" },
+    { v: "B",  label: "B",   color: "#D97706", bg: "#FFFBEB" },
+    { v: "M",  label: "M",   color: "#DC2626", bg: "#FEF2F2" },
+  ];
+  return (
+    <div style={{ display: "flex", gap: 6 }}>
+      {options.map((opt) => {
+        const sel = value === opt.v;
+        return (
+          <button
+            key={opt.v}
+            type="button"
+            onClick={() => onChange(sel ? null : opt.v)}
+            style={{
+              width: 40, height: 36, borderRadius: 9,
+              border: `1.5px solid ${sel ? opt.color : "rgba(0,0,0,0.1)"}`,
+              backgroundColor: sel ? opt.bg : "#FFFFFF",
+              color: sel ? opt.color : "#6E6E73",
+              fontSize: 12, fontWeight: 700, cursor: "pointer",
+            }}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Colonne MATIN ou SOIR d'un bassin ─────────────────────────────────────────
+
+function BassinColumn({
+  label,
+  measure,
+  config,
+  onChange,
+}: {
+  label: string;
+  measure: BassinMeasure;
+  config: BassinConfig;
+  onChange: (field: keyof BassinMeasure, value: string | number | null) => void;
+}) {
+  const tempAlert = !isTempBassinOk(config, measure.temperature);
+  const clLibreAlert = !isCloreLibreOk(measure.chlore_libre);
+  const clCombineAlert = !isChloreComibineOk(measure.chlore_combine);
+
+  const numInp = (
+    value: number | null,
+    onChg: (v: number | null) => void,
+    alert: boolean,
+    unit?: string,
+  ) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+      <input
+        type="number"
+        inputMode="decimal"
+        value={value ?? ""}
+        onChange={(e) => onChg(e.target.value === "" ? null : Number(e.target.value))}
+        style={{
+          width: 74, padding: "8px 10px", borderRadius: 9, textAlign: "right",
+          border: `1.5px solid ${alert ? "#FF3B30" : "rgba(0,0,0,0.12)"}`,
+          backgroundColor: alert ? "#FFF1F0" : "#FFFFFF",
+          fontSize: 14, fontWeight: 600, color: "#1D1D1F", outline: "none",
+        }}
+      />
+      {unit && <span style={{ fontSize: 11, color: "#8E8E93" }}>{unit}</span>}
+    </div>
+  );
+
+  const row = (lbl: string, node: React.ReactNode, hint?: string) => (
+    <div style={{ borderBottom: "1px solid rgba(0,0,0,0.04)", paddingBottom: 10, marginBottom: 10 }}>
+      <p style={{ margin: "0 0 5px", fontSize: 12, fontWeight: 600, color: "#6E6E73" }}>{lbl}</p>
+      {hint && <p style={{ margin: "0 0 5px", fontSize: 10, color: "#AEAEB2" }}>{hint}</p>}
+      {node}
+    </div>
+  );
+
+  return (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <p style={{ margin: "0 0 12px", fontSize: 11, fontWeight: 800, letterSpacing: "0.8px", textTransform: "uppercase", color: "#2563EB", textAlign: "center", padding: "5px 0", backgroundColor: "#EFF6FF", borderRadius: 8 }}>
+        {label}
+      </p>
+      {row("Heure", (
+        <input
+          type="time"
+          value={measure.heure ?? ""}
+          onChange={(e) => onChange("heure", e.target.value || null)}
+          style={{ width: "100%", padding: "8px 10px", borderRadius: 9, border: "1.5px solid rgba(0,0,0,0.12)", fontSize: 14, color: "#1D1D1F", outline: "none", backgroundColor: "#FFFFFF" }}
+        />
+      ))}
+      {row("Transparence", (
+        <TransparenceToggle value={measure.transparence} onChange={(v) => onChange("transparence", v)} />
+      ))}
+      {row("Température", numInp(measure.temperature, (v) => onChange("temperature", v), tempAlert, "°C"), config.tempRange ? `${config.tempRange.min}–${config.tempRange.max}°C` : config.tempMax ? `≤${config.tempMax}°C` : undefined)}
+      {row("Chlore libre", numInp(measure.chlore_libre, (v) => onChange("chlore_libre", v), clLibreAlert, "mg/L"), "0,4 – 1,4 mg/L")}
+      {row("Chlore total", numInp(measure.chlore_total, (v) => onChange("chlore_total", v), false, "mg/L"))}
+      {row("Chlore combiné", numInp(measure.chlore_combine, (v) => onChange("chlore_combine", v), clCombineAlert, "mg/L"), "< 0,6 mg/L")}
+    </div>
+  );
+}
+
+// ── Section bassin (MATIN + SOIR côte à côte) ─────────────────────────────────
+
+function BassinSection({
+  config,
+  donnees,
+  onChangeMatin,
+  onChangeSoir,
+}: {
+  config: BassinConfig;
+  donnees: DonneesRonde;
+  onChangeMatin: (field: keyof BassinMeasure, value: string | number | null) => void;
+  onChangeSoir: (field: keyof BassinMeasure, value: string | number | null) => void;
+}) {
+  const matin = donnees[config.matinKey] as BassinMeasure;
+  const soir  = donnees[config.soirKey]  as BassinMeasure;
+  const matinAlert = !isTempBassinOk(config, matin.temperature) || !isCloreLibreOk(matin.chlore_libre) || !isChloreComibineOk(matin.chlore_combine);
+  const soirAlert  = !isTempBassinOk(config, soir.temperature)  || !isCloreLibreOk(soir.chlore_libre)  || !isChloreComibineOk(soir.chlore_combine);
+  const hasAlert = matinAlert || soirAlert;
+
+  return (
+    <section
+      style={{
+        backgroundColor: "#FFFFFF",
+        borderRadius: 16,
+        border: `1px solid ${hasAlert ? "rgba(255,59,48,0.22)" : "rgba(0,0,0,0.06)"}`,
+        boxShadow: "0 2px 10px rgba(0,0,0,0.04)",
+        padding: "16px 18px",
+        marginBottom: 16,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
+        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#1D1D1F" }}>{config.label}</h2>
+        <span style={{ padding: "5px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700, color: hasAlert ? "#FF3B30" : "#34C759", backgroundColor: hasAlert ? "#FFF1F0" : "#F0FDF4", whiteSpace: "nowrap" }}>
+          {hasAlert ? "Anomalie" : "OK"}
+        </span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <BassinColumn label="MATIN" measure={matin} config={config} onChange={onChangeMatin} />
+        <BassinColumn label="SOIR"  measure={soir}  config={config} onChange={onChangeSoir} />
+      </div>
+    </section>
+  );
+}
+
 const primaryButton: CSSProperties = {
   width: "100%",
   border: "none",
@@ -253,6 +416,13 @@ export default function RondeFormPage() {
 
   function handleFieldChange(path: readonly string[], value: number | OkNok | null) {
     setDonnees((current) => setFieldValue(current, path, value));
+  }
+
+  function handleBassinChange(key: BassinKey, field: keyof BassinMeasure, value: string | number | null) {
+    setDonnees((prev) => ({
+      ...prev,
+      [key]: { ...(prev[key] as BassinMeasure), [field]: value },
+    }));
   }
 
   async function handleDownloadPdf() {
@@ -384,6 +554,17 @@ export default function RondeFormPage() {
             </span>
           </div>
         </div>
+
+        {/* Bassins sanitaires — MATIN | SOIR */}
+        {BASSINS_CONFIG.map((config) => (
+          <BassinSection
+            key={config.id}
+            config={config}
+            donnees={donnees}
+            onChangeMatin={(field, value) => handleBassinChange(config.matinKey, field, value)}
+            onChangeSoir={(field, value) => handleBassinChange(config.soirKey, field, value)}
+          />
+        ))}
 
         {sections.map((section) => (
           <SectionCard key={section.id} title={section.title} hasAlert={sectionHasAlert(section, donnees)}>

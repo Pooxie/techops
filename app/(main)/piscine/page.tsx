@@ -8,14 +8,13 @@ import {
 } from "recharts";
 import Header from "@/components/layout/Header";
 import {
-  fetchRondesPoolData,
+  fetchBassinRecords,
   fetchIncidentsSanitaires,
   createIncidentSanitaire,
   fetchCurrentUserSummary,
-  isTempThalassoOk,
-  SEUIL_TEMP_THALASSO,
   BASSIN_LABELS,
-  type RondePoolRecord,
+  NEW_BASSIN_LABELS,
+  type BassinRecord,
   type IncidentSanitaire,
   type BassinId,
 } from "@/lib/supabase";
@@ -155,80 +154,67 @@ function IncidentSheet({ onClose, onCreated }: { onClose: () => void; onCreated:
   );
 }
 
-// ── Tableau par bassin ────────────────────────────────────────────────────────
+// ── Tableau par bassin (MATIN + SOIR) ────────────────────────────────────────
 
-function HotelTable({ records }: { records: RondePoolRecord[] }) {
-  if (records.length === 0) return (
-    <div style={{ padding: "32px 20px", textAlign: "center", color: "#AEAEB2", fontSize: 13 }}>
-      Aucune ronde validée sur la période
-    </div>
-  );
+function TransparenceBadge({ val }: { val: "TB" | "B" | "M" | null }) {
+  if (!val) return <span style={{ color: "#C7C7CC" }}>—</span>;
+  const styles: Record<string, { color: string; bg: string }> = {
+    TB: { color: "#15803D", bg: "#F0FDF4" },
+    B:  { color: "#D97706", bg: "#FFFBEB" },
+    M:  { color: "#DC2626", bg: "#FEF2F2" },
+  };
+  const s = styles[val];
   return (
-    <div style={{ overflowX: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-        <thead>
-          <tr style={{ backgroundColor: "#F9F9FB" }}>
-            {["Date", "Heure", "Temp (°C)", "Chlore (L)", "Chlore (mg/L)", "SWAN", "Technicien", "Statut"].map((c) => (
-              <th key={c} style={{ padding: "9px 12px", textAlign: "left", fontSize: 10, fontWeight: 700, color: "#8E8E93", letterSpacing: "0.4px", textTransform: "uppercase", borderBottom: "1px solid rgba(0,0,0,0.06)", whiteSpace: "nowrap" }}>{c}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {records.map((r, i) => {
-            const cc = r.hotel_concentration_chlore;
-            const ccOk = cc === null || (cc >= 0.4 && cc <= 1.4);
-            return (
-            <tr key={r.ronde_id} style={{ backgroundColor: r.hotel_alerte ? "#FEF2F2" : (i % 2 === 0 ? "#FFFFFF" : "#FAFAFA"), borderBottom: "1px solid rgba(0,0,0,0.04)" }}>
-              <td style={{ padding: "9px 12px", fontWeight: 600, whiteSpace: "nowrap" }}>{fmtDateFull(r.date)}</td>
-              <td style={{ padding: "9px 12px", color: "#6E6E73" }}>{r.heure === "matin" ? "Matin" : "Après-midi"}</td>
-              <td style={{ padding: "9px 12px" }}><NumCell v={r.hotel_temperature} unit="°C" /></td>
-              <td style={{ padding: "9px 12px" }}><NumCell v={r.hotel_chlore} unit=" L" /></td>
-              <td style={{ padding: "9px 12px" }}><NumCell v={cc} warn={!ccOk} unit=" mg/L" /></td>
-              <td style={{ padding: "9px 12px" }}><OkNokBadge val={r.hotel_swan} /></td>
-              <td style={{ padding: "9px 12px", color: "#6E6E73", whiteSpace: "nowrap" }}>{r.technicien}</td>
-              <td style={{ padding: "9px 12px" }}><AlerteBadge alerte={r.hotel_alerte} /></td>
-            </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+    <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20, color: s.color, backgroundColor: s.bg }}>
+      {val}
+    </span>
   );
 }
 
-function ThalassoTable({ records }: { records: RondePoolRecord[] }) {
+function BassinTable({ records }: { records: BassinRecord[] }) {
   if (records.length === 0) return (
     <div style={{ padding: "32px 20px", textAlign: "center", color: "#AEAEB2", fontSize: 13 }}>
       Aucune ronde validée sur la période
     </div>
   );
+
+  const cols = ["Date", "Cl libre M", "Cl total M", "Cl combiné M", "Temp M", "Cl libre S", "Cl total S", "Cl combiné S", "Temp S", "Transparence", "Conforme"];
+  const thStyle: React.CSSProperties = {
+    padding: "9px 10px", textAlign: "left", fontSize: 9, fontWeight: 700,
+    color: "#8E8E93", letterSpacing: "0.4px", textTransform: "uppercase",
+    borderBottom: "1px solid rgba(0,0,0,0.06)", whiteSpace: "nowrap",
+  };
+  const tdStyle: React.CSSProperties = { padding: "8px 10px" };
+
   return (
     <div style={{ overflowX: "auto" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
         <thead>
           <tr style={{ backgroundColor: "#F9F9FB" }}>
-            {["Date", "Heure", "Temp (°C)", "Hypochlorite (L)", "Chlore (mg/L)", "Compteur m³", "Filtres", "SWAN", "Technicien", "Statut"].map((c) => (
-              <th key={c} style={{ padding: "9px 12px", textAlign: "left", fontSize: 10, fontWeight: 700, color: "#8E8E93", letterSpacing: "0.4px", textTransform: "uppercase", borderBottom: "1px solid rgba(0,0,0,0.06)", whiteSpace: "nowrap" }}>{c}</th>
-            ))}
+            {cols.map((c) => <th key={c} style={thStyle}>{c}</th>)}
           </tr>
         </thead>
         <tbody>
           {records.map((r, i) => {
-            const cc = r.thalasso_concentration_chlore;
-            const ccOk = cc === null || (cc >= 0.4 && cc <= 1.4);
+            const mClOk  = r.matin_chlore_libre  === null || (r.matin_chlore_libre  >= 0.4 && r.matin_chlore_libre  <= 1.4);
+            const sClOk  = r.soir_chlore_libre   === null || (r.soir_chlore_libre   >= 0.4 && r.soir_chlore_libre   <= 1.4);
+            const mCbOk  = r.matin_chlore_combine === null || r.matin_chlore_combine < 0.6;
+            const sCbOk  = r.soir_chlore_combine  === null || r.soir_chlore_combine  < 0.6;
+            const transparence = r.soir_transparence ?? r.matin_transparence;
             return (
-            <tr key={r.ronde_id} style={{ backgroundColor: r.thalasso_alerte ? "#FEF2F2" : (i % 2 === 0 ? "#FFFFFF" : "#FAFAFA"), borderBottom: "1px solid rgba(0,0,0,0.04)" }}>
-              <td style={{ padding: "9px 12px", fontWeight: 600, whiteSpace: "nowrap" }}>{fmtDateFull(r.date)}</td>
-              <td style={{ padding: "9px 12px", color: "#6E6E73" }}>{r.heure === "matin" ? "Matin" : "Après-midi"}</td>
-              <td style={{ padding: "9px 12px" }}><NumCell v={r.thalasso_temperature} warn={!isTempThalassoOk(r.thalasso_temperature)} unit="°C" /></td>
-              <td style={{ padding: "9px 12px" }}><NumCell v={r.thalasso_hypochlorite} unit=" L" /></td>
-              <td style={{ padding: "9px 12px" }}><NumCell v={cc} warn={!ccOk} unit=" mg/L" /></td>
-              <td style={{ padding: "9px 12px" }}><NumCell v={r.thalasso_compteur} unit=" m³" /></td>
-              <td style={{ padding: "9px 12px" }}><OkNokBadge val={r.thalasso_nettoyage} /></td>
-              <td style={{ padding: "9px 12px" }}><OkNokBadge val={r.thalasso_swan} /></td>
-              <td style={{ padding: "9px 12px", color: "#6E6E73", whiteSpace: "nowrap" }}>{r.technicien}</td>
-              <td style={{ padding: "9px 12px" }}><AlerteBadge alerte={r.thalasso_alerte} /></td>
-            </tr>
+              <tr key={`${r.ronde_id}-${r.bassin}`} style={{ backgroundColor: r.alerte ? "#FEF2F2" : (i % 2 === 0 ? "#FFFFFF" : "#FAFAFA"), borderBottom: "1px solid rgba(0,0,0,0.04)" }}>
+                <td style={{ ...tdStyle, fontWeight: 600, whiteSpace: "nowrap" }}>{fmtDateFull(r.date)}</td>
+                <td style={tdStyle}><NumCell v={r.matin_chlore_libre}  warn={!mClOk} unit=" mg/L" /></td>
+                <td style={tdStyle}><NumCell v={r.matin_chlore_total}  unit=" mg/L" /></td>
+                <td style={tdStyle}><NumCell v={r.matin_chlore_combine} warn={!mCbOk} unit=" mg/L" /></td>
+                <td style={tdStyle}><NumCell v={r.matin_temperature} unit="°C" /></td>
+                <td style={tdStyle}><NumCell v={r.soir_chlore_libre}   warn={!sClOk} unit=" mg/L" /></td>
+                <td style={tdStyle}><NumCell v={r.soir_chlore_total}   unit=" mg/L" /></td>
+                <td style={tdStyle}><NumCell v={r.soir_chlore_combine}  warn={!sCbOk} unit=" mg/L" /></td>
+                <td style={tdStyle}><NumCell v={r.soir_temperature} unit="°C" /></td>
+                <td style={tdStyle}><TransparenceBadge val={transparence} /></td>
+                <td style={tdStyle}><AlerteBadge alerte={r.alerte} /></td>
+              </tr>
             );
           })}
         </tbody>
@@ -284,8 +270,10 @@ function PoolChart({
 
 // ── Page principale ───────────────────────────────────────────────────────────
 
+const BASSIN_IDS = ["piscine_hotel", "piscine_institut", "pataugeoire"] as const;
+
 export default function PiscinePage() {
-  const [records, setRecords] = useState<RondePoolRecord[]>([]);
+  const [records, setRecords] = useState<BassinRecord[]>([]);
   const [incidents, setIncidents] = useState<IncidentSanitaire[]>([]);
   const [loading, setLoading] = useState(true);
   const [showIncident, setShowIncident] = useState(false);
@@ -295,7 +283,7 @@ export default function PiscinePage() {
   const load = useCallback(async () => {
     setLoading(true);
     const [r, i] = await Promise.all([
-      fetchRondesPoolData(filtrePeriode),
+      fetchBassinRecords(filtrePeriode),
       fetchIncidentsSanitaires(filtrePeriode),
     ]);
     setRecords(r);
@@ -306,21 +294,16 @@ export default function PiscinePage() {
   useEffect(() => { load(); }, [load]);
 
   // KPIs
-  const alertesHotel    = records.filter((r) => r.hotel_alerte).length;
-  const alertesThalasso = records.filter((r) => r.thalasso_alerte).length;
-  const totalAlertes    = alertesHotel + alertesThalasso;
-  const totalRondes     = records.length;
-  const tauxOk = totalRondes > 0 ? Math.round(((totalRondes * 2 - totalAlertes) / (totalRondes * 2)) * 100) : 100;
+  const totalAlertes = records.filter((r) => r.alerte).length;
+  const totalRondes  = new Set(records.map((r) => r.ronde_id)).size;
+  const tauxOk = records.length > 0 ? Math.round(((records.length - totalAlertes) / records.length) * 100) : 100;
   const derniere = records[0];
 
-  // Données graphiques
-  const hotelChartData = [...records]
+  // Chart data — Piscine Hôtel (matin temp + chlore libre)
+  const hotelChartData = records
+    .filter((r) => r.bassin === "piscine_hotel")
     .sort((a, b) => a.date.localeCompare(b.date))
-    .map((r) => ({ date: fmtDate(r.date), temp: r.hotel_temperature, chlore: r.hotel_chlore }));
-
-  const thalassoChartData = [...records]
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .map((r) => ({ date: fmtDate(r.date), temp: r.thalasso_temperature, hypo: r.thalasso_hypochlorite }));
+    .map((r) => ({ date: fmtDate(r.date), temp: r.matin_temperature, chlore: r.matin_chlore_libre }));
 
   async function handleExportPDF() {
     if (generatingPDF) return;
@@ -388,7 +371,7 @@ export default function PiscinePage() {
           <div style={{ ...cardStyle, borderColor: totalAlertes > 0 ? "rgba(220,38,38,0.2)" : undefined }}>
             <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: "#AEAEB2", textTransform: "uppercase", letterSpacing: "0.5px" }}>Alertes</p>
             <p style={{ margin: "4px 0 0", fontSize: 28, fontWeight: 800, color: totalAlertes > 0 ? "#DC2626" : "#1D1D1F" }}>{totalAlertes}</p>
-            <p style={{ margin: "2px 0 0", fontSize: 11, color: "#AEAEB2" }}>{alertesHotel} hôtel · {alertesThalasso} thalasso</p>
+            <p style={{ margin: "2px 0 0", fontSize: 11, color: "#AEAEB2" }}>sur {records.length} mesures</p>
           </div>
           <div style={cardStyle}>
             <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: "#AEAEB2", textTransform: "uppercase", letterSpacing: "0.5px" }}>Taux de conformité</p>
@@ -402,7 +385,7 @@ export default function PiscinePage() {
             <div style={cardStyle}>
               <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: "#AEAEB2", textTransform: "uppercase", letterSpacing: "0.5px" }}>Dernière ronde</p>
               <p style={{ margin: "4px 0 0", fontSize: 16, fontWeight: 800, color: "#1D1D1F" }}>{fmtDateFull(derniere.date)}</p>
-              <p style={{ margin: "2px 0 0", fontSize: 11, color: "#8E8E93" }}>{derniere.heure === "matin" ? "Matin" : "Après-midi"} · {derniere.technicien}</p>
+              <p style={{ margin: "2px 0 0", fontSize: 11, color: "#8E8E93" }}>{derniere.technicien}</p>
             </div>
           )}
         </div>
@@ -431,66 +414,41 @@ export default function PiscinePage() {
           </div>
         ) : (
           <>
-            {/* Piscine Hôtel */}
-            <div style={sectionCard}>
-              <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(0,0,0,0.05)", display: "flex", alignItems: "center", gap: 10 }}>
-                <Droplets size={15} color="#2563EB" />
-                <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#1D1D1F" }}>Piscine Hôtel</p>
-                <span style={{ fontSize: 11, color: "#8E8E93" }}>Eau de mer · Traitement chlore</span>
-                {alertesHotel > 0 && (
-                  <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 700, color: "#DC2626", backgroundColor: "#FEF2F2", padding: "2px 10px", borderRadius: 20 }}>
-                    {alertesHotel} alerte{alertesHotel > 1 ? "s" : ""}
-                  </span>
-                )}
-                {alertesHotel === 0 && records.length > 0 && (
-                  <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600, color: "#15803D" }}>
-                    <CheckCircle size={12} /> Tout OK
-                  </span>
-                )}
-              </div>
-              <HotelTable records={records} />
-            </div>
-
-            {/* Piscine Thalasso */}
-            <div style={sectionCard}>
-              <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(0,0,0,0.05)", display: "flex", alignItems: "center", gap: 10 }}>
-                <Droplets size={15} color="#0891B2" />
-                <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#1D1D1F" }}>Piscine Thalasso</p>
-                <span style={{ fontSize: 11, color: "#8E8E93" }}>Eau de mer · Traitement UV + hypochlorite · Seuil temp : {SEUIL_TEMP_THALASSO}°C</span>
-                {alertesThalasso > 0 && (
-                  <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 700, color: "#DC2626", backgroundColor: "#FEF2F2", padding: "2px 10px", borderRadius: 20 }}>
-                    {alertesThalasso} alerte{alertesThalasso > 1 ? "s" : ""}
-                  </span>
-                )}
-                {alertesThalasso === 0 && records.length > 0 && (
-                  <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600, color: "#15803D" }}>
-                    <CheckCircle size={12} /> Tout OK
-                  </span>
-                )}
-              </div>
-              <ThalassoTable records={records} />
-            </div>
-
-            {/* Graphiques */}
-            {records.length > 0 && (
-              <div style={{ display: "grid", gap: 16, marginBottom: 20 }} className="grid-2-resp">
-                <div style={{ backgroundColor: "#FFFFFF", borderRadius: 16, padding: "18px 16px", boxShadow: "0 2px 8px rgba(0,0,0,0.06)", border: "1px solid rgba(0,0,0,0.05)" }}>
-                  <PoolChart
-                    title="Piscine Hôtel — Température & Chlore"
-                    chartData={hotelChartData}
-                    line1Key="temp" line1Label="Temp (°C)" line1Color="#2563EB"
-                    line2Key="chlore" line2Label="Chlore" line2Color="#0891B2"
-                  />
+            {/* 3 bassins sanitaires */}
+            {BASSIN_IDS.map((bassinId) => {
+              const bassinRecords = records.filter((r) => r.bassin === bassinId);
+              const alertes = bassinRecords.filter((r) => r.alerte).length;
+              return (
+                <div key={bassinId} style={sectionCard}>
+                  <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(0,0,0,0.05)", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <Droplets size={15} color="#2563EB" />
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#1D1D1F" }}>{NEW_BASSIN_LABELS[bassinId]}</p>
+                    <span style={{ fontSize: 11, color: "#8E8E93" }}>Chlore libre 0,4–1,4 mg/L · Chlore combiné &lt; 0,6 mg/L</span>
+                    {alertes > 0 ? (
+                      <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 700, color: "#DC2626", backgroundColor: "#FEF2F2", padding: "2px 10px", borderRadius: 20 }}>
+                        {alertes} alerte{alertes > 1 ? "s" : ""}
+                      </span>
+                    ) : bassinRecords.length > 0 ? (
+                      <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600, color: "#15803D" }}>
+                        <CheckCircle size={12} /> Tout OK
+                      </span>
+                    ) : null}
+                  </div>
+                  <BassinTable records={bassinRecords} />
                 </div>
-                <div style={{ backgroundColor: "#FFFFFF", borderRadius: 16, padding: "18px 16px", boxShadow: "0 2px 8px rgba(0,0,0,0.06)", border: "1px solid rgba(0,0,0,0.05)" }}>
-                  <PoolChart
-                    title="Piscine Thalasso — Température & Hypochlorite"
-                    chartData={thalassoChartData}
-                    line1Key="temp" line1Label="Temp (°C)" line1Color="#0891B2"
-                    line2Key="hypo" line2Label="Hypochlorite (L)" line2Color="#16A34A"
-                    refLine={{ value: SEUIL_TEMP_THALASSO, label: `Max ${SEUIL_TEMP_THALASSO}°C` }}
-                  />
-                </div>
+              );
+            })}
+
+            {/* Graphique Piscine Hôtel */}
+            {hotelChartData.length > 0 && (
+              <div style={{ backgroundColor: "#FFFFFF", borderRadius: 16, padding: "18px 16px", boxShadow: "0 2px 8px rgba(0,0,0,0.06)", border: "1px solid rgba(0,0,0,0.05)", marginBottom: 20 }}>
+                <PoolChart
+                  title="Piscine Hôtel — Température & Chlore libre (matin)"
+                  chartData={hotelChartData}
+                  line1Key="temp"   line1Label="Temp (°C)"      line1Color="#2563EB"
+                  line2Key="chlore" line2Label="Cl libre (mg/L)" line2Color="#0891B2"
+                  refLine={{ value: 0.4, label: "Min 0,4" }}
+                />
               </div>
             )}
 
@@ -530,7 +488,7 @@ export default function PiscinePage() {
                 Rappel réglementaire
               </p>
               <p style={{ margin: 0, fontSize: 11, color: "#6E6E73" }}>
-                Arrêté du 26 mai 2021 — Température Thalasso : max {SEUIL_TEMP_THALASSO}°C · Prélèvements mensuels ARS (pH, bactériologie) · Document à conserver 3 ans — Art. D.1332-10 CSP
+                Arrêté du 26 mai 2021 — Chlore libre 0,4–1,4 mg/L · Chlore combiné &lt; 0,6 mg/L · Temp Institut max 32°C · Prélèvements mensuels ARS (pH, bactériologie) · Document à conserver 3 ans — Art. D.1332-10 CSP
               </p>
             </div>
           </>
