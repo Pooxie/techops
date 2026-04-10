@@ -1,5 +1,6 @@
 import { createBrowserClient } from "@supabase/ssr";
 import {
+  cloneDefaultDonnees,
   normalizeDonneesRonde,
   type DonneesRonde,
 } from "@/lib/rondes";
@@ -1667,6 +1668,106 @@ export async function saveRonde(payload: {
           user_id: u.id,
           type: "ronde_hors_norme",
           message: `Ronde ${payload.type} du ${new Date().toLocaleDateString("fr-FR")} — valeurs hors norme détectées`,
+          lue: false,
+        }))
+      );
+    }
+  }
+}
+
+// ─── RONDES — auto-save helpers ──────────────────────────────────────────────
+
+export async function createRondeEnCours(type: "ouverture" | "fermeture"): Promise<string> {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Non authentifié");
+
+  const { data: userData } = await supabase
+    .from("users")
+    .select("hotel_id")
+    .eq("id", user.id)
+    .single();
+  if (!userData) throw new Error("Profil utilisateur introuvable.");
+
+  const { data, error } = await supabase
+    .from("rondes")
+    .insert({
+      hotel_id: userData.hotel_id,
+      technicien_id: user.id,
+      type,
+      date_heure: new Date().toISOString(),
+      donnees: cloneDefaultDonnees(),
+      validee: false,
+      hors_norme: false,
+    })
+    .select("id")
+    .single();
+
+  if (error) throw error;
+  return (data as { id: string }).id;
+}
+
+export async function updateRondeDonnees(
+  id: string,
+  donnees: DonneesRonde,
+  observations?: string,
+): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("rondes")
+    .update({ donnees, observations: observations || null })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function validateRonde(
+  id: string,
+  payload: {
+    donnees: DonneesRonde;
+    observations: string;
+    signature: string;
+    hors_norme: boolean;
+  },
+): Promise<void> {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Non authentifié");
+
+  const { data: userData } = await supabase
+    .from("users")
+    .select("hotel_id")
+    .eq("id", user.id)
+    .single();
+
+  const { data: ronde, error } = await supabase
+    .from("rondes")
+    .update({
+      donnees: payload.donnees,
+      observations: payload.observations || null,
+      signature: payload.signature || null,
+      hors_norme: payload.hors_norme,
+      validee: true,
+    })
+    .eq("id", id)
+    .select("type")
+    .single();
+
+  if (error) throw error;
+
+  if (payload.hors_norme && userData && ronde) {
+    const { data: dtUsers } = await supabase
+      .from("users")
+      .select("id")
+      .eq("hotel_id", userData.hotel_id)
+      .eq("role", "dt");
+
+    if (dtUsers?.length) {
+      await supabase.from("notifications").insert(
+        dtUsers.map((u) => ({
+          hotel_id: userData.hotel_id,
+          user_id: u.id,
+          type: "ronde_hors_norme",
+          message: `Ronde ${(ronde as { type: string }).type} du ${new Date().toLocaleDateString("fr-FR")} — valeurs hors norme détectées`,
           lue: false,
         }))
       );

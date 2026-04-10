@@ -21,15 +21,17 @@ export type BassinKey =
 
 export type DonneesRonde = {
   piscine_hotel: {
-    analyse_piscine: number | null;
+    analyse_piscine: OkNok;
     debordement: OkNok;
     temperature: number | null;
     niveau_chlore: number | null;
     concentration_chlore: number | null;
     controle_swan: OkNok;
+    nettoyage_filtres: OkNok;
+    compteur_remplissage: number | null;
   };
   piscine_institut: {
-    analyse_piscine: number | null;
+    analyse_piscine: OkNok;
     gallet_pediluve: OkNok;
     debordement: OkNok;
   };
@@ -49,6 +51,7 @@ export type DonneesRonde = {
   };
   coffrets: {
     emu_controle_voyant: OkNok;
+    emu_controle_uv: OkNok;
     relevage_controle_voyant: OkNok;
     puisard_controle_voyant: OkNok;
   };
@@ -72,6 +75,7 @@ export type DonneesRonde = {
     p5_eau_mer_froide: number | null;
     p7c_affusions: number | null;
     p7b_douches_jet: number | null;
+    p7a_baignoires: number | null;
   };
   baches: {
     emf_controle_niveau: OkNok;
@@ -149,6 +153,8 @@ export const DONNEES_DEFAULT: DonneesRonde = {
     niveau_chlore: null,
     concentration_chlore: null,
     controle_swan: null,
+    nettoyage_filtres: null,
+    compteur_remplissage: null,
   },
   piscine_institut: {
     analyse_piscine: null,
@@ -171,6 +177,7 @@ export const DONNEES_DEFAULT: DonneesRonde = {
   },
   coffrets: {
     emu_controle_voyant: null,
+    emu_controle_uv: null,
     relevage_controle_voyant: null,
     puisard_controle_voyant: null,
   },
@@ -194,6 +201,7 @@ export const DONNEES_DEFAULT: DonneesRonde = {
     p5_eau_mer_froide: null,
     p7c_affusions: null,
     p7b_douches_jet: null,
+    p7a_baignoires: null,
   },
   baches: {
     emf_controle_niveau: null,
@@ -279,6 +287,7 @@ export type NumberFieldConfig = RondeFieldBase & {
   kind: "number";
   unit?: string;
   threshold?: ThresholdConfig;
+  warnOnly?: boolean; // orange warning, does NOT count as anomaly
   trend?: boolean;
 };
 
@@ -402,102 +411,110 @@ type LegacyDonneesRonde = {
 export const RONDE_SECTIONS: readonly RondeSectionConfig[] = [
   {
     id: "section-1",
-    title: "Section 1 - Piscine hotel",
+    title: "Piscine Hôtel",
     fields: [
-      { id: "piscine-hotel-analyse", kind: "number", label: "Analyse piscine", path: ["piscine_hotel", "analyse_piscine"] },
-      { id: "piscine-hotel-debordement", kind: "binary", label: "Debordement", path: ["piscine_hotel", "debordement"], labels: { ok: "Oui", nok: "Non" } },
+      { id: "piscine-hotel-analyse", kind: "binary", label: "Analyse piscine", path: ["piscine_hotel", "analyse_piscine"] },
+      { id: "piscine-hotel-debordement", kind: "binary", label: "Débordement", path: ["piscine_hotel", "debordement"] },
     ],
   },
   {
     id: "section-2",
-    title: "Section 2 - Piscine institut",
+    title: "Piscine Institut",
     fields: [
-      { id: "piscine-institut-analyse", kind: "number", label: "Analyse piscine", path: ["piscine_institut", "analyse_piscine"] },
-      { id: "piscine-institut-gallet", kind: "binary", label: "Gallet pediluve", path: ["piscine_institut", "gallet_pediluve"], labels: { ok: "Oui", nok: "Non" } },
-      { id: "piscine-institut-debordement", kind: "binary", label: "Debordement", path: ["piscine_institut", "debordement"], labels: { ok: "Oui", nok: "Non" } },
+      { id: "piscine-institut-analyse", kind: "binary", label: "Analyse piscine", path: ["piscine_institut", "analyse_piscine"] },
+      { id: "piscine-institut-gallet", kind: "binary", label: "Gallet pédiluve", path: ["piscine_institut", "gallet_pediluve"] },
+      { id: "piscine-institut-debordement", kind: "binary", label: "Débordement", path: ["piscine_institut", "debordement"] },
     ],
   },
   {
     id: "section-3",
-    title: "Section 3 - Institut",
+    title: "Institut",
     fields: [
-      { id: "institut-sauna", kind: "binary", label: "Mise en route sauna", path: ["institut", "mise_en_route_sauna"], labels: { ok: "Oui", nok: "Non" } },
+      { id: "institut-sauna", kind: "binary", label: "Mise en route Sauna", path: ["institut", "mise_en_route_sauna"], labels: { ok: "Oui", nok: "Non" } },
       { id: "institut-blocs", kind: "binary", label: "Blocs autonomes", path: ["institut", "blocs_autonomes"] },
     ],
   },
   {
     id: "section-4",
-    title: "Section 4 - Compresseur air",
+    title: "Compresseur Air",
     fields: [
       { id: "compresseur-mise-route", kind: "binary", label: "Mise en route", path: ["compresseur_air", "mise_en_route"], labels: { ok: "Oui", nok: "Non" } },
-      { id: "compresseur-controle-huile", kind: "binary", label: "Controle huile", path: ["compresseur_air", "controle_huile"] },
+      { id: "compresseur-controle-huile", kind: "binary", label: "Contrôle huile", path: ["compresseur_air", "controle_huile"] },
       { id: "compresseur-pression-spilotairs", kind: "number", label: "Pression circuit spilotairs", path: ["compresseur_air", "pression_spilotairs"], unit: "bar", threshold: { kind: "target", value: 1, tolerance: 0.05 }, trend: true },
     ],
   },
   {
     id: "section-5",
-    title: "Section 5 - Compteurs",
+    title: "Compteurs Pompes",
     fields: [
-      { id: "compteurs-pompe-1", kind: "number", label: "Compteur horaire Pompe 1 EdM", path: ["compteurs", "pompe1_edm"], unit: "h" },
-      { id: "compteurs-pompe-2", kind: "number", label: "Compteur horaire Pompe 2 EdM", path: ["compteurs", "pompe2_edm"], unit: "h" },
-      { id: "compteurs-emu-debit", kind: "number", label: "Compteur EMU debit", path: ["compteurs", "emu_debit"], unit: "m3/h" },
+      { id: "compteurs-pompe-1", kind: "number", label: "Pompe 1 (h)", path: ["compteurs", "pompe1_edm"], unit: "h" },
+      { id: "compteurs-pompe-2", kind: "number", label: "Pompe 2 (h)", path: ["compteurs", "pompe2_edm"], unit: "h" },
     ],
   },
   {
     id: "section-6",
-    title: "Section 6 - Coffrets",
+    title: "Compteur EMU",
     fields: [
-      { id: "coffrets-emu-voyant", kind: "binary", label: "Coffret EMU - Controle voyant", path: ["coffrets", "emu_controle_voyant"], labels: { ok: "Fait", nok: "Non fait" } },
+      { id: "compteurs-emu-debit", kind: "number", label: "Compteur débit", path: ["compteurs", "emu_debit"], unit: "m³/h" },
     ],
   },
   {
     id: "section-7",
-    title: "Section 7 - Bache piscine",
+    title: "Coffrets",
     fields: [
-      { id: "bache-piscine-niveau", kind: "binary", label: "Controle niveau", path: ["bache_piscine", "controle_niveau"] },
+      { id: "coffrets-emu-voyant", kind: "binary", label: "Coffret EMU — Contrôle voyants", path: ["coffrets", "emu_controle_voyant"] },
+      { id: "coffrets-emu-uv", kind: "binary", label: "Coffret EMU — Contrôle UV désinfection", path: ["coffrets", "emu_controle_uv"] },
+      { id: "coffrets-relevage-voyant", kind: "binary", label: "Coffret Relevage — Contrôle voyants", path: ["coffrets", "relevage_controle_voyant"] },
     ],
   },
   {
     id: "section-8",
-    title: "Section 8 - Piscine thalasso",
+    title: "Bâche Piscine",
     fields: [
-      { id: "thalasso-hypochlorite", kind: "number", label: "Niveau hypochlorite (L)", path: ["piscine_thalasso", "niveau_hypochlorite"], unit: "L" },
-      { id: "thalasso-concentration-chlore", kind: "number", label: "Concentration chlore", path: ["piscine_thalasso", "concentration_chlore"], unit: "mg/L", threshold: { kind: "range", min: 0.4, max: 1.4 } },
-      { id: "thalasso-debit", kind: "number", label: "Compteur debit", path: ["piscine_thalasso", "compteur_debit"], unit: "m3/h" },
-      { id: "thalasso-pompe", kind: "number", label: "N° pompe filtration", path: ["piscine_thalasso", "numero_pompe_filtration"] },
-      { id: "thalasso-nettoyage", kind: "binary", label: "Nettoyage filtres", path: ["piscine_thalasso", "nettoyage_filtres"], labels: { ok: "Fait", nok: "Non fait" } },
-      { id: "thalasso-temp-echange", kind: "number", label: "T° echange piscine", path: ["piscine_thalasso", "temp_echange"], unit: "°C", threshold: { kind: "max", value: 32 }, trend: true },
-      { id: "thalasso-remplissage", kind: "number", label: "Compteur remplissage", path: ["piscine_thalasso", "compteur_remplissage"] },
-      { id: "thalasso-swan", kind: "binary", label: "Controle SWAN", path: ["piscine_thalasso", "controle_swan"] },
+      { id: "bache-piscine-niveau", kind: "binary", label: "Contrôle niveau", path: ["bache_piscine", "controle_niveau"] },
     ],
   },
   {
     id: "section-9",
-    title: "Section 9 - Echangeur",
+    title: "Piscine Thalasso",
     fields: [
-      { id: "echangeur-bache-emc", kind: "number", label: "T° bache EMC", path: ["echangeur", "temp_bache_emc"], unit: "°C", threshold: { kind: "target", value: 40, tolerance: 0.2 }, trend: true },
+      { id: "thalasso-hypochlorite", kind: "number", label: "Niveau hypochlorite", path: ["piscine_thalasso", "niveau_hypochlorite"], unit: "L" },
+      { id: "thalasso-debit", kind: "number", label: "Compteur débit", path: ["piscine_thalasso", "compteur_debit"], unit: "m³/h" },
+      { id: "thalasso-pompe", kind: "number", label: "N° pompe filtration", path: ["piscine_thalasso", "numero_pompe_filtration"] },
+      { id: "thalasso-nettoyage", kind: "binary", label: "Nettoyage filtres", path: ["piscine_thalasso", "nettoyage_filtres"], labels: { ok: "Fait", nok: "Non fait" } },
+      { id: "thalasso-temp-echange", kind: "number", label: "T° échange pisc", path: ["piscine_thalasso", "temp_echange"], unit: "°C", threshold: { kind: "range", min: 31, max: 34 }, trend: true },
+      { id: "thalasso-remplissage", kind: "number", label: "Compteur remplissage", path: ["piscine_thalasso", "compteur_remplissage"] },
+      { id: "thalasso-swan", kind: "binary", label: "Contrôle SWAN", path: ["piscine_thalasso", "controle_swan"] },
     ],
   },
   {
     id: "section-10",
-    title: "Section 10 - Surpresseur",
+    title: "Échangeur",
     fields: [
-      { id: "surpresseur-p5", kind: "number", label: "P5 Eau de Mer Froide", path: ["surpresseur", "p5_eau_mer_froide"], unit: "bar" },
-      { id: "surpresseur-p7c", kind: "number", label: "P7c Affusions", path: ["surpresseur", "p7c_affusions"], unit: "bar" },
-      { id: "surpresseur-p7b", kind: "number", label: "P7b Douches a jet", path: ["surpresseur", "p7b_douches_jet"], unit: "bar" },
+      { id: "echangeur-bache-emc", kind: "number", label: "T° bâche EMC", path: ["echangeur", "temp_bache_emc"], unit: "°C", threshold: { kind: "target", value: 40, tolerance: 0.2 }, trend: true },
     ],
   },
   {
     id: "section-11",
-    title: "Section 11 - Baches",
+    title: "Surpresseur",
     fields: [
-      { id: "baches-emf", kind: "binary", label: "Bache EMF - Controle niveau", path: ["baches", "emf_controle_niveau"] },
-      { id: "baches-emc", kind: "binary", label: "Bache EMC - Controle niveau", path: ["baches", "emc_controle_niveau"] },
+      { id: "surpresseur-p5", kind: "number", label: "P5 Eau de Mer Froide", path: ["surpresseur", "p5_eau_mer_froide"], unit: "bar" },
+      { id: "surpresseur-p7c", kind: "number", label: "P7c Affusions", path: ["surpresseur", "p7c_affusions"], unit: "bar" },
+      { id: "surpresseur-p7b", kind: "number", label: "P7b Douches à jet", path: ["surpresseur", "p7b_douches_jet"], unit: "bar" },
+      { id: "surpresseur-p7a", kind: "number", label: "P7a Baignoires", path: ["surpresseur", "p7a_baignoires"], unit: "bar" },
     ],
   },
   {
     id: "section-12",
-    title: "Section 12 - Groupe eau",
+    title: "Bâches",
+    fields: [
+      { id: "baches-emf", kind: "binary", label: "Bâche EMF — Contrôle niveau", path: ["baches", "emf_controle_niveau"] },
+      { id: "baches-emc", kind: "binary", label: "Bâche EMC — Contrôle niveau", path: ["baches", "emc_controle_niveau"] },
+    ],
+  },
+  {
+    id: "section-13",
+    title: "Groupe Eau",
     fields: [
       { id: "groupe-eau-temp-retour", kind: "number", label: "Temp retour", path: ["groupe_eau", "temp_retour"], unit: "°C" },
       { id: "groupe-eau-pression-prim", kind: "number", label: "Pression Prim", path: ["groupe_eau", "pression_prim"], unit: "bar", threshold: { kind: "target", value: 1, tolerance: 0.05 }, trend: true },
@@ -505,58 +522,59 @@ export const RONDE_SECTIONS: readonly RondeSectionConfig[] = [
     ],
   },
   {
-    id: "section-13",
-    title: "Section 13 - Filtration EMF",
+    id: "section-14",
+    title: "Filtration EMF",
     fields: [
-      { id: "filtration-emf-uv", kind: "binary", label: "Controle UV EMF", path: ["filtration_emf", "controle_uv"] },
-      { id: "filtration-emf-avant", kind: "number", label: "Pression avant filtre", path: ["filtration_emf", "pression_avant_filtre"], unit: "bar" },
-      { id: "filtration-emf-apres", kind: "number", label: "Pression apres filtre", path: ["filtration_emf", "pression_apres_filtre"], unit: "bar" },
-      { id: "filtration-emf-swan", kind: "binary", label: "Controle SWAN", path: ["filtration_emf", "controle_swan"] },
+      { id: "filtration-emf-uv", kind: "binary", label: "Contrôle UV EMF", path: ["filtration_emf", "controle_uv"] },
+      { id: "filtration-emf-avant", kind: "number", label: "Pression AV filtre", path: ["filtration_emf", "pression_avant_filtre"], unit: "bar" },
+      { id: "filtration-emf-apres", kind: "number", label: "Pression APRÈS filtre", path: ["filtration_emf", "pression_apres_filtre"], unit: "bar" },
+      { id: "filtration-emf-swan", kind: "binary", label: "Contrôle SWAN", path: ["filtration_emf", "controle_swan"] },
       { id: "filtration-emf-remplissage", kind: "number", label: "Compteur remplissage", path: ["filtration_emf", "compteur_remplissage"] },
     ],
   },
   {
-    id: "section-14",
-    title: "Section 14 - Piscine hotel (suite)",
-    fields: [
-      { id: "piscine-hotel-temperature", kind: "number", label: "Temperature", path: ["piscine_hotel", "temperature"], unit: "°C" },
-      { id: "piscine-hotel-niveau-chlore", kind: "number", label: "Niveau chlore (L)", path: ["piscine_hotel", "niveau_chlore"], unit: "L" },
-      { id: "piscine-hotel-concentration-chlore", kind: "number", label: "Concentration chlore", path: ["piscine_hotel", "concentration_chlore"], unit: "mg/L", threshold: { kind: "range", min: 0.4, max: 1.4 } },
-      { id: "piscine-hotel-swan", kind: "binary", label: "Controle SWAN", path: ["piscine_hotel", "controle_swan"] },
-    ],
-  },
-  {
     id: "section-15",
-    title: "Section 15 - Pompe relevage",
+    title: "Piscine Hôtel (suite)",
     fields: [
-      { id: "pompe-relevage-p1", kind: "number", label: "Compteur P1", path: ["pompe_relevage", "compteur_p1"], unit: "h" },
-      { id: "pompe-relevage-p2", kind: "number", label: "Compteur P2", path: ["pompe_relevage", "compteur_p2"], unit: "h" },
+      { id: "piscine-hotel-remplissage", kind: "number", label: "Compteur remplissage", path: ["piscine_hotel", "compteur_remplissage"] },
+      { id: "piscine-hotel-temperature", kind: "number", label: "Température", path: ["piscine_hotel", "temperature"], unit: "°C", threshold: { kind: "range", min: 25, max: 40 }, warnOnly: true },
+      { id: "piscine-hotel-nettoyage", kind: "binary", label: "Nettoyage filtres", path: ["piscine_hotel", "nettoyage_filtres"], labels: { ok: "Fait", nok: "Non fait" } },
+      { id: "piscine-hotel-niveau-chlore", kind: "number", label: "Niveau chlore", path: ["piscine_hotel", "niveau_chlore"], unit: "L" },
+      { id: "piscine-hotel-swan", kind: "binary", label: "Contrôle SWAN", path: ["piscine_hotel", "controle_swan"] },
     ],
   },
   {
     id: "section-16",
-    title: "Section 16 - Reception",
+    title: "Pompe Relevage",
     fields: [
-      { id: "reception-arm-incendie", kind: "binary", label: "Controle ARM incendie", path: ["reception", "controle_arm_incendie"] },
-      { id: "reception-eclairage", kind: "binary", label: "Eclairage de secours", path: ["reception", "eclairage_secours"] },
+      { id: "pompe-relevage-p1", kind: "number", label: "Compteur P1 (h)", path: ["pompe_relevage", "compteur_p1"], unit: "h" },
+      { id: "pompe-relevage-p2", kind: "number", label: "Compteur P2 (h)", path: ["pompe_relevage", "compteur_p2"], unit: "h" },
     ],
   },
   {
     id: "section-17",
-    title: "Section 17 - Chaufferie",
+    title: "Réception",
     fields: [
-      { id: "chaufferie-circ-geg", kind: "number", label: "Pression circ GEG", path: ["chaufferie", "pression_circ_geg"], unit: "bar", threshold: { kind: "target", value: 2, tolerance: 0.05 }, trend: true },
+      { id: "reception-arm-incendie", kind: "binary", label: "Contrôle ARM incendie", path: ["reception", "controle_arm_incendie"] },
+      { id: "reception-eclairage", kind: "binary", label: "Éclairage de secours", path: ["reception", "eclairage_secours"] },
     ],
   },
   {
     id: "section-18",
-    title: "Section 18 - Chaufferie matin",
+    title: "Chaufferie",
+    fields: [
+      { id: "chaufferie-circ-geg", kind: "number", label: "Pression circ GEG", path: ["chaufferie", "pression_circ_geg"], unit: "bar", threshold: { kind: "range", min: 1.5, max: 2.5 }, trend: true },
+    ],
+  },
+  {
+    id: "section-19",
+    title: "Chaufferie Matin",
     showFor: ["ouverture"],
     fields: [
       { id: "chaufferie-matin-pompe-bouclage", kind: "binary", label: "Pompe de bouclage", path: ["chaufferie_matin", "pompe_bouclage"] },
       { id: "chaufferie-matin-pression-prim", kind: "number", label: "Pression prim chaud", path: ["chaufferie_matin", "pression_prim_chaud"], unit: "bar", threshold: { kind: "target", value: 2, tolerance: 0.05 }, trend: true },
-      { id: "chaufferie-matin-temp-primaire", kind: "number", label: "T° primaire echangeur", path: ["chaufferie_matin", "temp_primaire_echangeur"], unit: "°C" },
-      { id: "chaufferie-matin-temp-ecs", kind: "number", label: "T° depart ECS", path: ["chaufferie_matin", "temp_depart_ecs"], unit: "°C", trend: true },
+      { id: "chaufferie-matin-temp-primaire", kind: "number", label: "T° primaire échangeur", path: ["chaufferie_matin", "temp_primaire_echangeur"], unit: "°C" },
+      { id: "chaufferie-matin-temp-ecs", kind: "number", label: "T° départ ECS", path: ["chaufferie_matin", "temp_depart_ecs"], unit: "°C", trend: true },
       { id: "chaufferie-matin-temp-ballon", kind: "number", label: "T° ballon", path: ["chaufferie_matin", "temp_ballon"], unit: "°C" },
       { id: "chaufferie-matin-s3", kind: "number", label: "Temp recyclage thalasso S3", path: ["chaufferie_matin", "temp_recyclage_thalasso_s3"], unit: "°C" },
       { id: "chaufferie-matin-s4", kind: "number", label: "Temp recyclage Hotel S4", path: ["chaufferie_matin", "temp_recyclage_hotel_s4"], unit: "°C" },
@@ -564,12 +582,12 @@ export const RONDE_SECTIONS: readonly RondeSectionConfig[] = [
     ],
   },
   {
-    id: "section-19",
-    title: "Section 19 - Chaufferie apres-midi",
+    id: "section-20",
+    title: "Chaufferie Après-midi",
     showFor: ["fermeture"],
     fields: [
-      { id: "chaufferie-apm-temp-primaire", kind: "number", label: "T° primaire echangeur", path: ["chaufferie_apres_midi", "temp_primaire_echangeur"], unit: "°C" },
-      { id: "chaufferie-apm-temp-ecs", kind: "number", label: "T° depart ECS", path: ["chaufferie_apres_midi", "temp_depart_ecs"], unit: "°C", trend: true },
+      { id: "chaufferie-apm-temp-primaire", kind: "number", label: "T° primaire échangeur", path: ["chaufferie_apres_midi", "temp_primaire_echangeur"], unit: "°C" },
+      { id: "chaufferie-apm-temp-ecs", kind: "number", label: "T° départ ECS", path: ["chaufferie_apres_midi", "temp_depart_ecs"], unit: "°C", trend: true },
       { id: "chaufferie-apm-temp-ballon", kind: "number", label: "T° ballon", path: ["chaufferie_apres_midi", "temp_ballon"], unit: "°C" },
       { id: "chaufferie-apm-s3", kind: "number", label: "Temp recyclage thalasso S3", path: ["chaufferie_apres_midi", "temp_recyclage_thalasso_s3"], unit: "°C" },
       { id: "chaufferie-apm-s4", kind: "number", label: "Temp recyclage Hotel S4", path: ["chaufferie_apres_midi", "temp_recyclage_hotel_s4"], unit: "°C" },
@@ -577,32 +595,32 @@ export const RONDE_SECTIONS: readonly RondeSectionConfig[] = [
     ],
   },
   {
-    id: "section-20",
-    title: "Section 20 - Cave economat",
+    id: "section-21",
+    title: "Cave Économat",
     fields: [
-      { id: "cave-separateur", kind: "binary", label: "Separateur graisse", path: ["cave_economat", "separateur_graisse"] },
+      { id: "cave-separateur", kind: "binary", label: "Séparateur graisse", path: ["cave_economat", "separateur_graisse"] },
       { id: "cave-coffret", kind: "binary", label: "Coffret de relevage", path: ["cave_economat", "coffret_relevage"] },
       { id: "cave-pompe-puisard", kind: "binary", label: "Pompe puisard", path: ["cave_economat", "pompe_puisard"] },
     ],
   },
   {
-    id: "section-21",
-    title: "Section 21 - GEG hotel",
+    id: "section-22",
+    title: "GEG Hôtel",
     fields: [
       { id: "geg-pression", kind: "number", label: "Pression GEG", path: ["geg_hotel", "pression"], unit: "bar", trend: true },
-      { id: "geg-temperature", kind: "number", label: "Temperature GEG", path: ["geg_hotel", "temperature"], unit: "°C" },
+      { id: "geg-temperature", kind: "number", label: "Température GEG", path: ["geg_hotel", "temperature"], unit: "°C" },
     ],
   },
   {
-    id: "section-22",
-    title: "Section 22 - Dry cooling",
+    id: "section-23",
+    title: "Dry Cooling",
     fields: [
       { id: "dry-cooling-pression", kind: "number", label: "Pression circuit", path: ["dry_cooling", "pression_circuit"], unit: "bar", threshold: { kind: "target", value: 1.5, tolerance: 0.05 }, trend: true },
     ],
   },
   {
-    id: "section-23",
-    title: "Section 23 - Niveau fuel",
+    id: "section-24",
+    title: "Niveau Fuel",
     fields: [
       { id: "fuel-niveau", kind: "number", label: "Niveau fuel", path: ["niveau_fuel", "niveau_fuel"], unit: "L", trend: true },
     ],
@@ -777,7 +795,14 @@ export function formatThresholdHint(field: NumberFieldConfig): string | null {
 export function fieldHasAlert(field: RondeFieldConfig, data: DonneesRonde): boolean {
   const rawValue = getFieldValue(data, field.path);
   if (field.kind === "binary") return rawValue === "nok";
+  if (field.warnOnly) return false;
   return thresholdAlert(field.threshold ?? { kind: "range", min: Number.NEGATIVE_INFINITY, max: Number.POSITIVE_INFINITY }, rawValue as number | null);
+}
+
+export function fieldHasWarn(field: RondeFieldConfig, data: DonneesRonde): boolean {
+  if (field.kind !== "number" || !field.warnOnly || !field.threshold) return false;
+  const rawValue = getFieldValue(data, field.path);
+  return thresholdAlert(field.threshold, rawValue as number | null);
 }
 
 export function sectionHasAlert(section: RondeSectionConfig, data: DonneesRonde): boolean {
@@ -807,15 +832,17 @@ export function detectHorsNorme(donnees: DonneesRonde): boolean {
 function mapLegacyToNew(raw: LegacyDonneesRonde): DonneesRonde {
   return {
     piscine_hotel: {
-      analyse_piscine: raw.piscine_thalasso?.piscine_hotel?.ph ?? null,
+      analyse_piscine: null,
       debordement: raw.piscine_thalasso?.piscine_hotel?.debordement ?? null,
       temperature: raw.piscine_thalasso?.piscine_hotel?.temperature ?? null,
       niveau_chlore: raw.piscine_thalasso?.piscine_hotel?.chlore_libre ?? null,
       concentration_chlore: null,
       controle_swan: raw.piscine_thalasso?.piscine_hotel?.controle_swan ?? null,
+      nettoyage_filtres: raw.piscine_thalasso?.piscine_hotel?.nettoyage_filtres ?? null,
+      compteur_remplissage: null,
     },
     piscine_institut: {
-      analyse_piscine: raw.piscine_thalasso?.piscine_institut?.ph ?? null,
+      analyse_piscine: null,
       gallet_pediluve: raw.piscine_thalasso?.piscine_institut?.gallet_pediluves ?? null,
       debordement: raw.piscine_thalasso?.piscine_institut?.debordement ?? null,
     },
@@ -835,6 +862,7 @@ function mapLegacyToNew(raw: LegacyDonneesRonde): DonneesRonde {
     },
     coffrets: {
       emu_controle_voyant: raw.chaufferie_ecs?.compteur_emu?.controle_voyants ?? null,
+      emu_controle_uv: raw.chaufferie_ecs?.compteur_emu?.controle_uv ?? null,
       relevage_controle_voyant: raw.technique_generale?.coffret_relevage?.controle_voyants ?? null,
       puisard_controle_voyant: raw.technique_generale?.coffret_puisard?.controle_voyants ?? null,
     },
@@ -858,6 +886,7 @@ function mapLegacyToNew(raw: LegacyDonneesRonde): DonneesRonde {
       p5_eau_mer_froide: raw.piscine_thalasso?.surpresseur?.p5_eau_mer ?? null,
       p7c_affusions: raw.piscine_thalasso?.surpresseur?.p7c_affusions ?? null,
       p7b_douches_jet: raw.piscine_thalasso?.surpresseur?.p7b_douches_jet ?? null,
+      p7a_baignoires: null,
     },
     baches: {
       emf_controle_niveau: raw.piscine_thalasso?.baches?.emf_niveau ?? null,
