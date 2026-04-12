@@ -1,14 +1,7 @@
-import { createClient } from "@supabase/supabase-js";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 const HOTEL_ID = "00000000-0000-0000-0000-000000000587";
 const CUVE_CAPACITY = 30_000;
-
-function adminSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  );
-}
 
 export type Alerte = {
   id: string;
@@ -19,7 +12,7 @@ export type Alerte = {
 };
 
 export async function GET() {
-  const supabase = adminSupabase();
+  const supabase = await createServerSupabaseClient();
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
   const todayStart = todayStr + "T00:00:00.000Z";

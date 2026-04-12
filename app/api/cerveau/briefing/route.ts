@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { createClient } from "@supabase/supabase-js";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 const HOTEL_ID = "00000000-0000-0000-0000-000000000587";
 const CUVE_CAPACITY = 30_000;
@@ -8,20 +8,13 @@ function anthropicClient() {
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 }
 
-function adminSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  );
-}
-
 export async function GET() {
   try {
     if (!process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY === "your_api_key_here") {
       return Response.json({ error: "ANTHROPIC_API_KEY manquante" }, { status: 500 });
     }
 
-    const supabase = adminSupabase();
+    const supabase = await createServerSupabaseClient();
     const today = new Date();
     const todayStr = today.toISOString().slice(0, 10);
     const monthStart = todayStr.slice(0, 7) + "-01";

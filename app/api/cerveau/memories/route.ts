@@ -1,16 +1,9 @@
-import { createClient } from "@supabase/supabase-js";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 const HOTEL_ID = "00000000-0000-0000-0000-000000000587";
 
-function adminSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  );
-}
-
 export async function GET() {
-  const supabase = adminSupabase();
+  const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase
     .from("dt_memories")
     .select("id, contenu, tags, created_at")
@@ -31,7 +24,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Contenu requis" }, { status: 400 });
   }
 
-  const supabase = adminSupabase();
+  const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase
     .from("dt_memories")
     .insert({ hotel_id: HOTEL_ID, contenu: contenu.trim(), tags: tags ?? [] })
@@ -46,7 +39,7 @@ export async function DELETE(request: Request) {
   const { id } = (await request.json()) as { id: string };
   if (!id) return Response.json({ error: "ID requis" }, { status: 400 });
 
-  const supabase = adminSupabase();
+  const supabase = await createServerSupabaseClient();
   const { error } = await supabase
     .from("dt_memories")
     .delete()

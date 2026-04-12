@@ -1,20 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { createClient } from "@supabase/supabase-js";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 const HOTEL_ID = "00000000-0000-0000-0000-000000000587";
 const RECIPIENT_EMAIL = "Matheo.riba2a@gmail.com";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-function adminSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  );
-}
-
 export async function POST() {
-  const supabase = adminSupabase();
+  const supabase = await createServerSupabaseClient();
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
   const since7Days = new Date(today.getTime() - 7 * 86_400_000);
