@@ -78,7 +78,7 @@ export async function GET() {
     const owKey = process.env.OPENWEATHER_API_KEY;
     if (owKey && owKey !== "your_openweather_api_key_here") {
       try {
-        const r = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=Ajaccio,FR&appid=${owKey}&units=metric&lang=fr`);
+        const r = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=Ajaccio,FR&appid=${owKey}&units=metric&lang=fr`, { cache: "no-store" });
         if (r.ok) {
           const w = await r.json() as { main: { temp: number }; weather: { description: string }[] };
           meteo = `${Math.round(w.main.temp)}°C, ${w.weather[0]?.description ?? ""}`;

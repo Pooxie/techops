@@ -95,8 +95,6 @@ export default function Sidebar() {
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [signingOut, setSigningOut] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
-  const [cerveauBadge, setCerveauBadge] = useState(0);
-
   useEffect(() => {
     let active = true;
     fetchCurrentUserSummary()
@@ -116,16 +114,6 @@ export default function Sidebar() {
     return () => {
       active = false;
     };
-  }, []);
-
-  // Fetch badge urgent count pour le Cerveau
-  useEffect(() => {
-    let active = true;
-    fetch("/api/cerveau/actions")
-      .then((r) => r.json() as Promise<{ urgentCount?: number }>)
-      .then((d) => { if (active) setCerveauBadge(d.urgentCount ?? 0); })
-      .catch(() => {});
-    return () => { active = false; };
   }, []);
 
   useEffect(() => {
@@ -250,7 +238,6 @@ export default function Sidebar() {
               {section.items.map((item) => {
                 const isActive = pathname === item.href;
                 const Icon = item.icon;
-                const badge = item.href === "/cerveau" ? cerveauBadge : 0;
                 return (
                   <li key={item.href}>
                     <Link
@@ -286,18 +273,7 @@ export default function Sidebar() {
                         strokeWidth={isActive ? 2.5 : 2}
                         style={{ flexShrink: 0 }}
                       />
-                      <span style={{ flex: 1 }}>{item.label}</span>
-                      {badge > 0 && (
-                        <span style={{
-                          minWidth: 18, height: 18, borderRadius: 9,
-                          backgroundColor: "#FF3B30", color: "#FFFFFF",
-                          fontSize: 10, fontWeight: 700,
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          padding: "0 5px", flexShrink: 0,
-                        }}>
-                          {badge > 9 ? "9+" : badge}
-                        </span>
-                      )}
+                      {item.label}
                     </Link>
                   </li>
                 );
