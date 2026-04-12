@@ -46,7 +46,6 @@ export async function GET() {
       supabase
         .from("set_controles")
         .select("nom, prestataire, date_prochaine")
-        .eq("hotel_id", HOTEL_ID)
         .eq("statut", "retard")
         .order("date_prochaine", { ascending: true })
         .limit(5),

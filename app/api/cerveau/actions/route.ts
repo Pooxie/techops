@@ -43,20 +43,17 @@ export async function GET() {
   ] = await Promise.all([
     supabase
       .from("set_controles")
-      .select("id, nom, prestataire, date_prochaine, prestataire_id")
-      .eq("hotel_id", HOTEL_ID)
+      .select("id, nom, prestataire, date_prochaine")
       .eq("statut", "retard")
       .order("date_prochaine", { ascending: true }),
     supabase
       .from("set_controles")
       .select("id, nom, prestataire, date_prochaine")
-      .eq("hotel_id", HOTEL_ID)
       .eq("statut", "alerte")
       .order("date_prochaine", { ascending: true }),
     supabase
       .from("non_conformites")
-      .select("id, description, gravite, date_cible, controle_id")
-      .eq("hotel_id", HOTEL_ID)
+      .select("id, description, gravite, date_cible")
       .eq("statut", "ouverte")
       .eq("gravite", "majeure"),
     supabase

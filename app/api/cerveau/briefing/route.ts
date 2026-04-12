@@ -14,6 +14,10 @@ function adminSupabase() {
 }
 
 export async function GET() {
+  if (!process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY === "your_api_key_here") {
+    return Response.json({ error: "ANTHROPIC_API_KEY manquante dans .env.local" }, { status: 500 });
+  }
+
   const supabase = adminSupabase();
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
@@ -36,21 +40,18 @@ export async function GET() {
     supabase
       .from("set_controles")
       .select("nom, prestataire, date_prochaine, date_derniere_visite")
-      .eq("hotel_id", HOTEL_ID)
       .eq("statut", "retard")
       .order("date_prochaine", { ascending: true })
       .limit(8),
     supabase
       .from("set_controles")
       .select("nom, prestataire, date_prochaine")
-      .eq("hotel_id", HOTEL_ID)
       .eq("statut", "alerte")
       .order("date_prochaine", { ascending: true })
       .limit(5),
     supabase
       .from("non_conformites")
       .select("description, gravite, date_cible")
-      .eq("hotel_id", HOTEL_ID)
       .eq("statut", "ouverte")
       .order("gravite", { ascending: false })
       .limit(6),

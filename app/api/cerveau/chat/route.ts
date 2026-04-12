@@ -15,6 +15,10 @@ function adminSupabase() {
 type Message = { role: "user" | "assistant"; content: string };
 
 export async function POST(request: Request) {
+  if (!process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY === "your_api_key_here") {
+    return Response.json({ error: "ANTHROPIC_API_KEY manquante dans .env.local" }, { status: 500 });
+  }
+
   const { message, history } = (await request.json()) as {
     message: string;
     history: Message[];
@@ -45,12 +49,10 @@ export async function POST(request: Request) {
     supabase
       .from("set_controles")
       .select("nom, prestataire, statut, date_derniere_visite, date_prochaine, periodicite_mois, non_conformites_restantes, notes, categorie:set_categories(nom)")
-      .eq("hotel_id", HOTEL_ID)
       .order("nom"),
     supabase
       .from("non_conformites")
       .select("description, gravite, statut, date_cible, created_at, controle:set_controles(nom)")
-      .eq("hotel_id", HOTEL_ID)
       .order("created_at", { ascending: false })
       .limit(50),
     supabase
