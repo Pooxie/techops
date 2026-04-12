@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Brain, RefreshCw, Send, Loader2, Trash2, Plus,
-  ChevronRight, Calendar, Phone, Clock, CheckCircle,
-  AlertTriangle, Zap, X, Mail,
+  ChevronRight, Phone, Clock, CheckCircle,
+  Zap, X, Mail,
 } from "lucide-react";
 import Header from "@/components/layout/Header";
 
@@ -188,7 +188,14 @@ function BriefingCard() {
 
 // ─── Bloc Actions ─────────────────────────────────────────────────────────────
 
-function ActionCard({
+const PRIORITE_DOT: Record<ActionPriorite, string> = {
+  urgent:     "#EF4444",
+  important:  "#F59E0B",
+  surveiller: "#3B82F6",
+  ok:         "#10B981",
+};
+
+function ActionRow({
   action,
   onFait,
   onCreerIntervention,
@@ -197,86 +204,109 @@ function ActionCard({
   onFait: (id: string) => void;
   onCreerIntervention: (action: ActionJour) => void;
 }) {
+  const [open, setOpen] = useState(false);
   const cfg = PRIORITE_CONFIG[action.priorite];
+
   return (
     <div style={{
-      backgroundColor: cfg.bg,
-      border: `1px solid ${cfg.border}22`,
-      borderLeft: `4px solid ${cfg.border}`,
-      borderRadius: 14,
-      padding: "16px 18px",
+      borderRadius: 12,
+      overflow: "hidden",
+      border: `1px solid ${open ? cfg.border + "44" : "rgba(0,0,0,0.06)"}`,
+      transition: "border-color 0.15s",
     }}>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-            <span style={{
-              fontSize: 10, fontWeight: 800, letterSpacing: "0.8px",
-              color: cfg.color, backgroundColor: `${cfg.border}22`,
-              padding: "2px 8px", borderRadius: 6,
-            }}>
-              {action.emoji} {cfg.label}
+      {/* Ligne principale — cliquable */}
+      <button
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          width: "100%", display: "flex", alignItems: "center", gap: 12,
+          padding: "11px 14px",
+          background: open ? cfg.bg : "#FFFFFF",
+          border: "none", cursor: "pointer",
+          textAlign: "left", transition: "background 0.15s",
+          borderLeft: `3px solid ${PRIORITE_DOT[action.priorite]}`,
+        }}
+      >
+        {/* Dot priorité */}
+        <span style={{ fontSize: 16, flexShrink: 0, lineHeight: 1 }}>{action.emoji}</span>
+
+        {/* Titre */}
+        <span style={{
+          flex: 1, fontSize: 13.5, fontWeight: 600, color: "#111827",
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        }}>
+          {action.titre}
+        </span>
+
+        {/* Meta droite */}
+        <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          {action.duree_estimee && (
+            <span style={{ fontSize: 11, color: "#9CA3AF", display: "flex", alignItems: "center", gap: 3 }}>
+              <Clock size={11} /> {action.duree_estimee}
             </span>
-          </div>
-          <h4 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "#111827", lineHeight: 1.4 }}>
-            {action.titre}
-          </h4>
-          <p style={{ margin: "4px 0 0", fontSize: 13, color: "#6B7280", lineHeight: 1.5 }}>
+          )}
+          {action.contact?.tel && (
+            <span style={{ fontSize: 11, color: "#6B7280", display: "flex", alignItems: "center", gap: 3 }}>
+              <Phone size={11} />
+            </span>
+          )}
+          <ChevronRight size={14} color="#D1D5DB" style={{ transform: open ? "rotate(90deg)" : "none", transition: "transform 0.15s" }} />
+        </span>
+      </button>
+
+      {/* Détails dépliables */}
+      {open && (
+        <div style={{
+          padding: "12px 14px 14px",
+          borderTop: `1px solid ${cfg.border}22`,
+          backgroundColor: cfg.bg,
+        }}>
+          <p style={{ margin: "0 0 10px", fontSize: 13, color: "#4B5563", lineHeight: 1.6 }}>
             {action.description}
           </p>
-        </div>
-      </div>
 
-      {/* Contact */}
-      {action.contact && (
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-          <Phone size={13} color="#6B7280" />
-          <span style={{ fontSize: 13, color: "#374151", fontWeight: 500 }}>
-            {action.contact.nom} : {action.contact.tel || "—"}
-          </span>
-        </div>
-      )}
-
-      {/* Durée */}
-      {action.duree_estimee && (
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
-          <Clock size={13} color="#6B7280" />
-          <span style={{ fontSize: 12, color: "#6B7280" }}>Estimé : {action.duree_estimee}</span>
-        </div>
-      )}
-
-      {/* Boutons */}
-      {action.priorite !== "ok" && (
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            onClick={() => onFait(action.id)}
-            style={{
-              display: "flex", alignItems: "center", gap: 6,
-              padding: "7px 14px", borderRadius: 9,
-              border: `1px solid ${cfg.border}`,
-              backgroundColor: "#FFFFFF",
-              color: cfg.color, fontSize: 12, fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            <CheckCircle size={13} />
-            Fait
-          </button>
-          {action.source === "set" || action.source === "intervention" ? (
-            <button
-              onClick={() => onCreerIntervention(action)}
+          {action.contact && (
+            <a
+              href={`tel:${action.contact.tel}`}
               style={{
-                display: "flex", alignItems: "center", gap: 6,
-                padding: "7px 14px", borderRadius: 9,
-                border: "none",
-                backgroundColor: cfg.border,
-                color: "#FFFFFF", fontSize: 12, fontWeight: 600,
-                cursor: "pointer",
+                display: "inline-flex", alignItems: "center", gap: 6,
+                marginBottom: 10, padding: "5px 12px",
+                backgroundColor: "#FFFFFF", border: `1px solid ${cfg.border}`,
+                borderRadius: 8, textDecoration: "none",
+                fontSize: 13, fontWeight: 600, color: cfg.color,
               }}
             >
-              <ChevronRight size={13} />
-              Créer intervention
+              <Phone size={12} />
+              {action.contact.nom} — {action.contact.tel}
+            </a>
+          )}
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={() => onFait(action.id)}
+              style={{
+                display: "flex", alignItems: "center", gap: 5,
+                padding: "6px 14px", borderRadius: 8,
+                border: `1px solid ${cfg.border}`,
+                backgroundColor: "#FFFFFF",
+                color: cfg.color, fontSize: 12, fontWeight: 700, cursor: "pointer",
+              }}
+            >
+              <CheckCircle size={13} /> Fait
             </button>
-          ) : null}
+            {(action.source === "set" || action.source === "intervention") && (
+              <button
+                onClick={() => onCreerIntervention(action)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 5,
+                  padding: "6px 14px", borderRadius: 8, border: "none",
+                  backgroundColor: cfg.border,
+                  color: "#FFFFFF", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                }}
+              >
+                <Zap size={13} /> Créer intervention
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -287,6 +317,7 @@ function ActionsBlock() {
   const [actions, setActions] = useState<ActionJour[]>([]);
   const [loading, setLoading] = useState(true);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [showSecondaires, setShowSecondaires] = useState(false);
 
   useEffect(() => {
     fetch("/api/cerveau/actions")
@@ -299,14 +330,14 @@ function ActionsBlock() {
   const visible = actions.filter((a) => !dismissed.has(a.id));
   const urgent = visible.filter((a) => a.priorite === "urgent");
   const important = visible.filter((a) => a.priorite === "important");
-  const reste = visible.filter((a) => a.priorite !== "urgent" && a.priorite !== "important");
+  const secondaires = visible.filter((a) => a.priorite === "surveiller" || a.priorite === "ok");
+  const primaires = [...urgent, ...important];
 
   function handleFait(id: string) {
     setDismissed((prev) => new Set([...prev, id]));
   }
 
   function handleCreerIntervention(action: ActionJour) {
-    // Redirige vers /interventions avec pre-fill (via URL param)
     const params = new URLSearchParams({
       titre: action.titre.slice(0, 100),
       description: action.description,
@@ -316,52 +347,65 @@ function ActionsBlock() {
   }
 
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#111827" }}>
-          Actions du jour
-          {urgent.length > 0 && (
-            <span style={{
-              marginLeft: 8, backgroundColor: "#EF4444", color: "#FFFFFF",
-              fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 10,
-            }}>
-              {urgent.length} urgent{urgent.length > 1 ? "s" : ""}
-            </span>
-          )}
-        </h3>
+    <div style={{ backgroundColor: "#FFFFFF", borderRadius: 16, padding: 20, boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#111827" }}>Actions du jour</h3>
+          <div style={{ display: "flex", gap: 5 }}>
+            {urgent.length > 0 && (
+              <span style={{ backgroundColor: "#EF4444", color: "#FFF", fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 20 }}>
+                {urgent.length} urgent{urgent.length > 1 ? "s" : ""}
+              </span>
+            )}
+            {important.length > 0 && (
+              <span style={{ backgroundColor: "#FEF3C7", color: "#92400E", fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 20 }}>
+                {important.length} important{important.length > 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
+        </div>
         {dismissed.size > 0 && (
-          <button
-            onClick={() => setDismissed(new Set())}
-            style={{ fontSize: 12, color: "#6B7280", background: "none", border: "none", cursor: "pointer" }}
-          >
-            Tout réafficher
+          <button onClick={() => setDismissed(new Set())} style={{ fontSize: 11, color: "#9CA3AF", background: "none", border: "none", cursor: "pointer" }}>
+            Réafficher
           </button>
         )}
       </div>
 
       {loading ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: 20 }}>
-          <Loader2 size={18} color="#6B7280" style={{ animation: "spin 1s linear infinite" }} />
-          <span style={{ color: "#6B7280", fontSize: 14 }}>Analyse en cours…</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "16px 0" }}>
+          <Loader2 size={16} color="#9CA3AF" style={{ animation: "spin 1s linear infinite" }} />
+          <span style={{ color: "#9CA3AF", fontSize: 13 }}>Analyse en cours…</span>
+        </div>
+      ) : primaires.length === 0 && secondaires.filter(a => a.priorite !== "ok").length === 0 ? (
+        <div style={{ padding: "16px 12px", backgroundColor: "#ECFDF5", borderRadius: 10, textAlign: "center", fontSize: 13, color: "#065F46" }}>
+          ✅ Tout est sous contrôle — bonne journée !
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {[...urgent, ...important, ...reste].map((a) => (
-            <ActionCard
-              key={a.id}
-              action={a}
-              onFait={handleFait}
-              onCreerIntervention={handleCreerIntervention}
-            />
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {/* Actions prioritaires */}
+          {primaires.map((a) => (
+            <ActionRow key={a.id} action={a} onFait={handleFait} onCreerIntervention={handleCreerIntervention} />
           ))}
-          {visible.length === 0 && (
-            <div style={{
-              backgroundColor: "#ECFDF5", border: "1px solid #6EE7B7",
-              borderRadius: 14, padding: "20px 18px",
-              textAlign: "center", color: "#065F46", fontSize: 14,
-            }}>
-              ✅ Toutes les actions du jour sont traitées. Bien joué !
-            </div>
+
+          {/* Secondaires repliées */}
+          {secondaires.length > 0 && (
+            <>
+              <button
+                onClick={() => setShowSecondaires((v) => !v)}
+                style={{
+                  marginTop: 4, display: "flex", alignItems: "center", gap: 6,
+                  background: "none", border: "none", cursor: "pointer",
+                  fontSize: 12, color: "#9CA3AF", fontWeight: 500, padding: "4px 0",
+                }}
+              >
+                <ChevronRight size={13} style={{ transform: showSecondaires ? "rotate(90deg)" : "none", transition: "transform 0.15s" }} />
+                {showSecondaires ? "Masquer" : `Voir ${secondaires.length} élément${secondaires.length > 1 ? "s" : ""} secondaire${secondaires.length > 1 ? "s" : ""}`}
+              </button>
+              {showSecondaires && secondaires.map((a) => (
+                <ActionRow key={a.id} action={a} onFait={handleFait} onCreerIntervention={handleCreerIntervention} />
+              ))}
+            </>
           )}
         </div>
       )}
@@ -970,11 +1014,9 @@ export default function CerveauPage() {
         <BriefingCard />
 
         {/* BLOC 2 + 6 — Actions & Mémoire */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: 24, alignItems: "start" }}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 20, alignItems: "start" }}
           className="cerveau-grid-main">
-          <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-            <ActionsBlock />
-          </div>
+          <ActionsBlock />
           <MemoireBlock />
         </div>
 
