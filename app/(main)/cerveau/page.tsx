@@ -95,13 +95,13 @@ function BriefingCard() {
     setError("");
     try {
       const res = await fetch("/api/cerveau/briefing");
-      if (!res.ok) throw new Error("Erreur serveur");
-      const data = await res.json() as { briefing: string; timestamp: string; date: string };
-      setBriefing(data.briefing);
-      setTimestamp(data.timestamp);
-      setDate(data.date);
-    } catch {
-      setError("Impossible de générer le briefing — vérifie ta connexion et l'API key.");
+      const data = await res.json() as { briefing?: string; timestamp?: string; date?: string; error?: string };
+      if (!res.ok || data.error) throw new Error(data.error ?? "Erreur serveur");
+      setBriefing(data.briefing ?? "");
+      setTimestamp(data.timestamp ?? "");
+      setDate(data.date ?? "");
+    } catch (e) {
+      setError(`Erreur : ${e instanceof Error ? e.message : "inconnue"}`);
     } finally {
       setLoading(false);
     }
