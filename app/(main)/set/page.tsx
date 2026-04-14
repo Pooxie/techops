@@ -75,6 +75,18 @@ function getDomain(theme: string | null | undefined): DomainCfg {
   return DOMAINS.find((d) => d.theme === theme) ?? DOMAINS[2];
 }
 
+/**
+ * Normalise la valeur theme_name issue de Supabase :
+ * - Trim les espaces éventuels
+ * - Accepte uniquement les valeurs exactes 'Safety' | 'Environment' | 'Technical'
+ * - Tout le reste (NULL, vide, casse différente) → "Technical"
+ */
+function normalizeTheme(theme_name: string | null | undefined): "Safety" | "Environment" | "Technical" {
+  const v = typeof theme_name === "string" ? theme_name.trim() : null;
+  if (v === "Safety" || v === "Environment" || v === "Technical") return v;
+  return "Technical";
+}
+
 // ─── Icônes & couleurs par catégorie ─────────────────────────────────────────
 
 const CATEGORIE_ICONS: Record<string, LucideIcon> = {
@@ -801,7 +813,7 @@ export default function SetPage() {
       let pdfTitle: string;
       if (theme) {
         filteredCats = categories
-          .map((cat) => ({ ...cat, controles: cat.controles.filter((c) => (c.theme_name ?? "Technical") === theme) }))
+          .map((cat) => ({ ...cat, controles: cat.controles.filter((c) => normalizeTheme(c.theme_name) === theme) }))
           .filter((cat) => cat.controles.length > 0);
         pdfTitle = `Registre Réglementaire — ${getDomain(theme).label}`;
       } else {
@@ -828,7 +840,7 @@ export default function SetPage() {
           .map((cat) => ({
             ...cat,
             controles: cat.controles.filter((c) => {
-              const matchDomain = (c.theme_name ?? "Technical") === d.theme;
+              const matchDomain = normalizeTheme(c.theme_name) === d.theme;
               const matchStatus = filtre === "tous" || c.statut === filtre;
               const matchSearch = !sq
                 || c.nom.toLowerCase().includes(sq)
@@ -855,10 +867,23 @@ export default function SetPage() {
 
   // ── Counts par domaine (pour stats cards Évol 4) ──────────────────────────
   const domainStats = useMemo(() => {
-    if (!categories) return DOMAINS.map((d) => ({ ...d, total: 0, retard: 0, alerte: 0 }));
+    if (!categories) return DOMAINS.map((d) => ({ ...d, total: 0, retard: 0, alerte: 0, nullCount: 0 }));
+    // Nombre de contrôles sans theme_name renseigné (NULL ou valeur inconnue)
+    const allControles = categories.flatMap((c) => c.controles);
+    const nullCount = allControles.filter((c) => {
+      const v = typeof c.theme_name === "string" ? c.theme_name.trim() : null;
+      return v !== "Safety" && v !== "Environment" && v !== "Technical";
+    }).length;
     return DOMAINS.map((d) => {
-      const all = categories.flatMap((c) => c.controles).filter((c) => (c.theme_name ?? "Technical") === d.theme);
-      return { ...d, total: all.length, retard: all.filter((c) => c.statut === "retard").length, alerte: all.filter((c) => c.statut === "alerte").length };
+      const all = allControles.filter((c) => normalizeTheme(c.theme_name) === d.theme);
+      return {
+        ...d,
+        total: all.length,
+        retard: all.filter((c) => c.statut === "retard").length,
+        alerte: all.filter((c) => c.statut === "alerte").length,
+        // Uniquement affiché sous la carte Technique
+        nullCount: d.theme === "Technical" ? nullCount : 0,
+      };
     });
   }, [categories]);
 
@@ -950,6 +975,11 @@ export default function SetPage() {
                   {d.alerte > 0 ? <span style={{ color: "#FF9500", fontWeight: 600 }}>{d.alerte} alerte{d.alerte > 1 ? "s" : ""}</span> : null}
                   {d.retard === 0 && d.alerte === 0 ? <span style={{ color: "#34C759" }}>Tout à jour ✓</span> : null}
                 </p>
+                {d.nullCount > 0 && (
+                  <p style={{ margin: "4px 0 0", fontSize: 11, color: "#AEAEB2", fontStyle: "italic" }}>
+                    dont {d.nullCount} sans domaine
+                  </p>
+                )}
               </button>
             ))}
           </div>
