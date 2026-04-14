@@ -1,6 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 
+export const maxDuration = 60; // 60s max (Vercel Pro)
+
 const HOTEL_ID = "00000000-0000-0000-0000-000000000587";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
