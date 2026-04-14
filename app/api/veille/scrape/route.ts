@@ -44,7 +44,7 @@ async function handleScrape() {
       max_tokens: 1500,
       system: "Tu es un expert juridique hôtelier. Utilise la recherche web pour trouver des réglementations françaises récentes pour les hôtels ERP. Réponds UNIQUEMENT avec du JSON valide.",
       tools: [
-        { type: "web_search_20260209", name: "web_search" } as unknown as Anthropic.Tool,
+        { type: "web_search_20260209", name: "web_search", allowed_callers: ["direct"] } as unknown as Anthropic.Tool,
       ],
       messages: [
         {
