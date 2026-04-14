@@ -8,22 +8,20 @@ import {
   Calendar,
   Map,
   Wrench,
-  Zap,
-  RefreshCw,
-  CheckSquare,
+  ClipboardList,
   AlertTriangle,
-  Users,
   FolderOpen,
-  UserCog,
   ChevronUp,
   LogOut,
   Mail,
   ShieldCheck,
   BedDouble,
   Droplets,
-  Fuel,
   Receipt,
   Brain,
+  Settings,
+  Briefcase,
+  HardHat,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -46,38 +44,43 @@ type NavSection = {
 
 const navSections: NavSection[] = [
   {
-    title: "Général",
+    title: "Tableau de bord",
     items: [
-      { href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard },
-      { href: "/planning",  label: "Planning",        icon: Calendar },
-      { href: "/cerveau",   label: "Cerveau de Cyrille", icon: Brain },
+      { href: "/dashboard", label: "Tableau de bord",  icon: LayoutDashboard },
+      { href: "/cerveau",   label: "Cerveau IA",        icon: Brain },
+      { href: "/plan",      label: "Plan de l'hôtel",   icon: Map },
     ],
   },
   {
     title: "Exploitation",
     items: [
-      { href: "/equipements",  label: "Équipements",   icon: Wrench },
-      { href: "/interventions",label: "Interventions", icon: Zap },
-      { href: "/chambres",     label: "Chambres",      icon: BedDouble },
-      { href: "/piscine",      label: "Registre Sanitaire", icon: Droplets },
-      { href: "/fuel",         label: "Suivi Fuel",    icon: Fuel },
-      { href: "/depenses",     label: "Dépenses",      icon: Receipt },
-      { href: "/rondes",       label: "Rondes",        icon: RefreshCw },
+      { href: "/rondes",        label: "Rondes",        icon: ClipboardList },
+      { href: "/interventions", label: "Interventions", icon: Wrench },
+      { href: "/planning",      label: "Planning",      icon: Calendar },
+      { href: "/chambres",      label: "Chambres",      icon: BedDouble },
     ],
   },
   {
-    title: "Pilotage",
+    title: "Réglementaire",
     items: [
-      { href: "/set",            label: "Contrôles SET",    icon: CheckSquare },
-      { href: "/non-conformites",label: "Non-conformités",  icon: AlertTriangle },
-      { href: "/prestataires",   label: "Prestataires",     icon: Users },
-      { href: "/documents",      label: "Documents",        icon: FolderOpen },
+      { href: "/set",             label: "Contrôles SET",      icon: ShieldCheck },
+      { href: "/non-conformites", label: "Non-conformités",    icon: AlertTriangle },
+      { href: "/piscine",         label: "Registre sanitaire", icon: Droplets },
     ],
   },
   {
-    title: "Admin",
+    title: "Ressources",
     items: [
-      { href: "/techniciens", label: "Techniciens", icon: UserCog },
+      { href: "/equipements",  label: "Équipements",  icon: Settings },
+      { href: "/prestataires", label: "Prestataires", icon: Briefcase },
+      { href: "/techniciens",  label: "Techniciens",  icon: HardHat },
+      { href: "/documents",    label: "Documents",    icon: FolderOpen },
+    ],
+  },
+  {
+    title: "Finances",
+    items: [
+      { href: "/depenses", label: "Dépenses & Factures", icon: Receipt },
     ],
   },
 ];
@@ -209,18 +212,18 @@ export default function Sidebar() {
           padding: "16px 12px",
         }}
       >
-        {navSections.map((section) => (
-          <div key={section.title} style={{ marginBottom: 24 }}>
+        {navSections.map((section, idx) => (
+          <div key={section.title}>
             <p
               style={{
                 fontSize: 10,
                 fontWeight: 700,
                 letterSpacing: "0.9px",
                 textTransform: "uppercase",
-                color: "#AEAEB2",
+                color: "rgba(142,142,147,0.55)",
                 padding: "0 10px",
                 marginBottom: 4,
-                marginTop: 0,
+                marginTop: idx === 0 ? 0 : 16,
               }}
             >
               {section.title}
