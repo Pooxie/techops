@@ -867,13 +867,8 @@ export default function SetPage() {
 
   // ── Counts par domaine (pour stats cards Évol 4) ──────────────────────────
   const domainStats = useMemo(() => {
-    if (!categories) return DOMAINS.map((d) => ({ ...d, total: 0, retard: 0, alerte: 0, nullCount: 0 }));
-    // Nombre de contrôles sans theme_name renseigné (NULL ou valeur inconnue)
+    if (!categories) return DOMAINS.map((d) => ({ ...d, total: 0, retard: 0, alerte: 0 }));
     const allControles = categories.flatMap((c) => c.controles);
-    const nullCount = allControles.filter((c) => {
-      const v = typeof c.theme_name === "string" ? c.theme_name.trim() : null;
-      return v !== "Safety" && v !== "Environment" && v !== "Technical";
-    }).length;
     return DOMAINS.map((d) => {
       const all = allControles.filter((c) => normalizeTheme(c.theme_name) === d.theme);
       return {
@@ -881,8 +876,6 @@ export default function SetPage() {
         total: all.length,
         retard: all.filter((c) => c.statut === "retard").length,
         alerte: all.filter((c) => c.statut === "alerte").length,
-        // Uniquement affiché sous la carte Technique
-        nullCount: d.theme === "Technical" ? nullCount : 0,
       };
     });
   }, [categories]);
@@ -975,11 +968,6 @@ export default function SetPage() {
                   {d.alerte > 0 ? <span style={{ color: "#FF9500", fontWeight: 600 }}>{d.alerte} alerte{d.alerte > 1 ? "s" : ""}</span> : null}
                   {d.retard === 0 && d.alerte === 0 ? <span style={{ color: "#34C759" }}>Tout à jour ✓</span> : null}
                 </p>
-                {d.nullCount > 0 && (
-                  <p style={{ margin: "4px 0 0", fontSize: 11, color: "#AEAEB2", fontStyle: "italic" }}>
-                    dont {d.nullCount} sans domaine
-                  </p>
-                )}
               </button>
             ))}
           </div>

@@ -159,6 +159,29 @@ export type SetCategorie = {
   controles: SetControle[];
 };
 
+/**
+ * Fallback : déduit le domaine S/E/T depuis le nom de la catégorie
+ * quand theme_name est NULL en base.
+ * Ordre de priorité : Safety > Environment > Technical (défaut)
+ */
+function inferThemeFromCategory(categorie_nom: string): "Safety" | "Environment" | "Technical" {
+  const n = categorie_nom.toLowerCase();
+  const isSafety = [
+    "commission de sécurité", "sécurité incendie", "installations electriques",
+    "installations électriques", "appareils de levage", "amiante",
+    "equipements de protection", "équipements de protection",
+  ].some((k) => n.includes(k.toLowerCase()));
+  if (isSafety) return "Safety";
+
+  const isEnvironment = [
+    "hygiène de l'eau", "hygiene de l'eau", "eau / domaine maritime",
+    "domaine maritime", "environnement",
+  ].some((k) => n.includes(k.toLowerCase()));
+  if (isEnvironment) return "Environment";
+
+  return "Technical";
+}
+
 function computeStatut(date_prochaine: string | null): "ok" | "alerte" | "retard" {
   if (!date_prochaine) return "ok";
   const today = new Date();
@@ -216,6 +239,8 @@ export async function fetchSetCategories(): Promise<SetCategorie[]> {
     controles: (controlesMap.get(cat.id) ?? []).map((c) => ({
       ...c,
       categorie_nom: cat.nom,
+      // Si theme_name est NULL en base, l'inférer depuis le nom de la catégorie
+      theme_name: c.theme_name ?? inferThemeFromCategory(cat.nom),
     })),
   }));
 }
