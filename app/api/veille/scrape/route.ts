@@ -7,7 +7,7 @@ const HOTEL_ID = "00000000-0000-0000-0000-000000000587";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
-  maxRetries: 0, // Fail fast — pas de retry silencieux qui fait hang la requête
+  maxRetries: 0,
 });
 
 type VeilleResult = {
@@ -20,18 +20,6 @@ type VeilleResult = {
   domaine: string;
   impact: string;
 };
-
-const SYSTEM_PROMPT = `Tu es un expert juridique spécialisé en réglementation hôtelière française et Établissements Recevant du Public (ERP).
-Tu utilises la recherche web pour trouver les nouvelles réglementations françaises récentes concernant les hôtels et ERP.
-Tu te concentres sur un hôtel 4-5 étoiles avec spa, piscines et thalasso.
-À la fin de tes recherches, tu réponds UNIQUEMENT avec un JSON valide, sans aucun texte autour.`;
-
-const USER_MESSAGE = `Recherche les nouvelles réglementations françaises (6 derniers mois) pour les hôtels ERP 4-5 étoiles avec spa et piscine. Fais 2-3 recherches : "réglementation hôtel ERP 2025 2026", "normes sécurité incendie hôtel France", "obligations hôtel piscine spa réglementation".
-
-Retourne UNIQUEMENT ce JSON :
-{"resultats":[{"titre":"...","resume":"ce qui change pour l'hôtel","source_url":"...","source_nom":"...","date_publication":"YYYY-MM-DD ou null","date_entree_vigueur":"YYYY-MM-DD ou null","domaine":"Sécurité|Environnement|Technique|Général","impact":"Fort|Moyen|Faible"}]}
-
-Si rien → {"resultats":[]}`;
 
 export async function GET() {
   try {
@@ -48,62 +36,31 @@ async function handleScrape() {
     return Response.json({ error: "ANTHROPIC_API_KEY manquante dans .env.local" }, { status: 500 });
   }
 
-  // Boucle agentique — Claude fait ses recherches web (server-side) puis retourne le JSON
-  let messages: Anthropic.MessageParam[] = [
-    { role: "user", content: USER_MESSAGE },
-  ];
-
+  // Appel unique — web_search est server-side, Anthropic gère tout en un seul tour
   let rawText = "";
-  const MAX_ITERATIONS = 10;
-
   try {
-    for (let i = 0; i < MAX_ITERATIONS; i++) {
-      const response = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 2000,
-        system: SYSTEM_PROMPT,
-        tools: [
-          { type: "web_search_20260209", name: "web_search" } as unknown as Anthropic.Tool,
-        ],
-        messages,
-      });
-
-      if (response.stop_reason === "end_turn") {
-        const textBlock = response.content.find((b) => b.type === "text");
-        rawText = textBlock?.type === "text" ? textBlock.text : "";
-        break;
-      }
-
-      if (response.stop_reason === "tool_use") {
-        // Construire les tool_results pour chaque outil utilisé
-        const toolUseBlocks = response.content.filter((b) => b.type === "tool_use");
-        const toolResults: Anthropic.MessageParam = {
+    const response = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 1500,
+      system: "Tu es un expert juridique hôtelier. Utilise la recherche web pour trouver des réglementations françaises récentes pour les hôtels ERP. Réponds UNIQUEMENT avec du JSON valide.",
+      tools: [
+        { type: "web_search_20260209", name: "web_search" } as unknown as Anthropic.Tool,
+      ],
+      messages: [
+        {
           role: "user",
-          content: toolUseBlocks.map((b) => {
-            if (b.type !== "tool_use") return null;
-            return {
-              type: "tool_result" as const,
-              tool_use_id: b.id,
-              content: "",
-            };
-          }).filter(Boolean) as Anthropic.ToolResultBlockParam[],
-        };
-        messages.push({ role: "assistant", content: response.content });
-        messages.push(toolResults);
-        continue;
-      }
+          content: `Fais 2 recherches web : "réglementation hôtel ERP France 2025 2026" et "normes sécurité incendie piscine hôtel France".
 
-      if (response.stop_reason === "pause_turn") {
-        messages.push({ role: "assistant", content: response.content });
-        messages.push({ role: "user", content: "Continue." });
-        continue;
-      }
+Retourne UNIQUEMENT ce JSON (max 5 résultats) :
+{"resultats":[{"titre":"...","resume":"ce qui change pour l'hôtel (2 phrases max)","source_url":"...","source_nom":"...","date_publication":"YYYY-MM-DD ou null","date_entree_vigueur":"YYYY-MM-DD ou null","domaine":"Sécurité|Environnement|Technique|Général","impact":"Fort|Moyen|Faible"}]}
 
-      // max_tokens ou autre — on tente de récupérer ce qu'on a
-      const textBlock = response.content.find((b) => b.type === "text");
-      if (textBlock?.type === "text") rawText = textBlock.text;
-      break;
-    }
+Si rien trouvé : {"resultats":[]}`,
+        },
+      ],
+    });
+
+    const textBlock = response.content.find((b) => b.type === "text");
+    rawText = textBlock?.type === "text" ? textBlock.text : "";
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[veille/scrape] Anthropic API error:", message);
@@ -123,9 +80,9 @@ async function handleScrape() {
       resultats = Array.isArray(parsed.resultats) ? parsed.resultats : [];
     }
   } catch {
-    console.error("[veille/scrape] JSON parse error, raw:", rawText.slice(0, 500));
+    console.error("[veille/scrape] JSON parse error, raw:", rawText.slice(0, 300));
     return Response.json(
-      { error: "Impossible de parser la réponse Claude", raw: rawText.slice(0, 500) },
+      { error: "Impossible de parser la réponse Claude", raw: rawText.slice(0, 300) },
       { status: 500 }
     );
   }
@@ -136,18 +93,32 @@ async function handleScrape() {
 
   const supabase = await createServerSupabaseClient();
 
-  const rows = resultats.map((r) => ({
-    hotel_id: HOTEL_ID,
-    titre: r.titre,
-    resume: r.resume,
-    source_url: r.source_url || null,
-    source_nom: r.source_nom || null,
-    date_publication: r.date_publication || null,
-    date_entree_vigueur: r.date_entree_vigueur || null,
-    domaine: r.domaine || "Général",
-    impact: r.impact || "Faible",
-    lu: false,
-  }));
+  // Déduplication : récupérer les titres déjà en base
+  const { data: existing } = await supabase
+    .from("veille_reglementaire")
+    .select("titre")
+    .eq("hotel_id", HOTEL_ID);
+
+  const existingTitres = new Set((existing ?? []).map((r: { titre: string }) => r.titre.toLowerCase().trim()));
+
+  const rows = resultats
+    .filter((r) => !existingTitres.has(r.titre.toLowerCase().trim()))
+    .map((r) => ({
+      hotel_id: HOTEL_ID,
+      titre: r.titre,
+      resume: r.resume,
+      source_url: r.source_url || null,
+      source_nom: r.source_nom || null,
+      date_publication: r.date_publication || null,
+      date_entree_vigueur: r.date_entree_vigueur || null,
+      domaine: r.domaine || "Général",
+      impact: r.impact || "Faible",
+      lu: false,
+    }));
+
+  if (rows.length === 0) {
+    return Response.json({ message: "Aucun nouvel article (déjà en base)", inserted: 0 });
+  }
 
   const { error } = await supabase.from("veille_reglementaire").insert(rows);
 
