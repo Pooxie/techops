@@ -97,15 +97,23 @@ export default function VeillePage() {
     setRefreshError(null);
     try {
       const res = await fetch("/api/veille/scrape");
-      const data = await res.json();
-      if (!res.ok) {
-        setRefreshError(data.error ?? `Erreur ${res.status}`);
+      const text = await res.text();
+
+      let data: Record<string, unknown> = {};
+      try {
+        data = JSON.parse(text);
+      } catch {
+        // La route a planté (Next.js a renvoyé du HTML/texte brut)
+        setRefreshError(`Erreur serveur (${res.status}) — consultez la console Next.js pour le détail.`);
+        console.error("[veille] Réponse non-JSON de /api/veille/scrape :", text.slice(0, 500));
         return;
       }
-      if (data.error) {
-        setRefreshError(data.error);
+
+      if (!res.ok || data.error) {
+        setRefreshError(String(data.error ?? `Erreur ${res.status}`));
         return;
       }
+
       await loadArticles();
     } catch (err) {
       setRefreshError(err instanceof Error ? err.message : "Erreur réseau");

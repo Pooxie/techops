@@ -51,6 +51,16 @@ Ensuite, retourne uniquement ce JSON avec les éléments pertinents trouvés :
 Si aucun élément pertinent → retourner { "resultats": [] }`;
 
 export async function GET() {
+  try {
+    return await handleScrape();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[veille/scrape] Erreur non capturée :", err);
+    return Response.json({ error: `Erreur inattendue : ${message}` }, { status: 500 });
+  }
+}
+
+async function handleScrape() {
   if (!process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY === "your_api_key_here") {
     return Response.json({ error: "ANTHROPIC_API_KEY manquante dans .env.local" }, { status: 500 });
   }
