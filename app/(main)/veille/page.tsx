@@ -68,6 +68,7 @@ export default function VeillePage() {
   const [nonLusSeulement, setNonLusSeulement] = useState(false);
   const [derniereMaj, setDerniereMaj] = useState<string | null>(null);
   const [markingLu, setMarkingLu] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
 
   const loadArticles = useCallback(async () => {
     setLoading(true);
@@ -93,9 +94,21 @@ export default function VeillePage() {
 
   async function handleRefresh() {
     setRefreshing(true);
+    setRefreshError(null);
     try {
-      await fetch("/api/veille/scrape");
+      const res = await fetch("/api/veille/scrape");
+      const data = await res.json();
+      if (!res.ok) {
+        setRefreshError(data.error ?? `Erreur ${res.status}`);
+        return;
+      }
+      if (data.error) {
+        setRefreshError(data.error);
+        return;
+      }
       await loadArticles();
+    } catch (err) {
+      setRefreshError(err instanceof Error ? err.message : "Erreur réseau");
     } finally {
       setRefreshing(false);
     }
@@ -205,6 +218,27 @@ export default function VeillePage() {
           </button>
         </div>
       </div>
+
+      {/* Erreur de refresh */}
+      {refreshError && (
+        <div
+          style={{
+            marginBottom: 16,
+            padding: "12px 16px",
+            borderRadius: 12,
+            backgroundColor: "#FFF1F0",
+            border: "1px solid rgba(255,59,48,0.20)",
+            color: "#B42318",
+            fontSize: 13,
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 8,
+          }}
+        >
+          <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+          <span>{refreshError}</span>
+        </div>
+      )}
 
       {/* Filtres */}
       <div

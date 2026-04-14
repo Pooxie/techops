@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 
-export const maxDuration = 60; // 60s max (Vercel Pro)
+export const maxDuration = 60;
 
 const HOTEL_ID = "00000000-0000-0000-0000-000000000587";
 
@@ -55,7 +55,7 @@ export async function GET() {
     return Response.json({ error: "ANTHROPIC_API_KEY manquante dans .env.local" }, { status: 500 });
   }
 
-  // Boucle agentique — Claude fait ses recherches web puis retourne le JSON
+  // Boucle agentique — Claude fait ses recherches web (server-side) puis retourne le JSON
   let messages: Anthropic.MessageParam[] = [
     { role: "user", content: USER_MESSAGE },
   ];
@@ -63,34 +63,58 @@ export async function GET() {
   let rawText = "";
   const MAX_ITERATIONS = 10;
 
-  for (let i = 0; i < MAX_ITERATIONS; i++) {
-    const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 4000,
-      system: SYSTEM_PROMPT,
-      tools: [
-        { type: "web_search_20260209", name: "web_search" } as unknown as Anthropic.Tool,
-      ],
-      messages,
-    });
+  try {
+    for (let i = 0; i < MAX_ITERATIONS; i++) {
+      const response = await anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 4000,
+        system: SYSTEM_PROMPT,
+        tools: [
+          { type: "web_search_20260209", name: "web_search" } as unknown as Anthropic.Tool,
+        ],
+        messages,
+      });
 
-    if (response.stop_reason === "end_turn") {
+      if (response.stop_reason === "end_turn") {
+        const textBlock = response.content.find((b) => b.type === "text");
+        rawText = textBlock?.type === "text" ? textBlock.text : "";
+        break;
+      }
+
+      if (response.stop_reason === "tool_use") {
+        // Construire les tool_results pour chaque outil utilisé
+        const toolUseBlocks = response.content.filter((b) => b.type === "tool_use");
+        const toolResults: Anthropic.MessageParam = {
+          role: "user",
+          content: toolUseBlocks.map((b) => {
+            if (b.type !== "tool_use") return null;
+            return {
+              type: "tool_result" as const,
+              tool_use_id: b.id,
+              content: "",
+            };
+          }).filter(Boolean) as Anthropic.ToolResultBlockParam[],
+        };
+        messages.push({ role: "assistant", content: response.content });
+        messages.push(toolResults);
+        continue;
+      }
+
+      if (response.stop_reason === "pause_turn") {
+        messages.push({ role: "assistant", content: response.content });
+        messages.push({ role: "user", content: "Continue." });
+        continue;
+      }
+
+      // max_tokens ou autre — on tente de récupérer ce qu'on a
       const textBlock = response.content.find((b) => b.type === "text");
-      rawText = textBlock?.type === "text" ? textBlock.text : "";
+      if (textBlock?.type === "text") rawText = textBlock.text;
       break;
     }
-
-    if (response.stop_reason === "pause_turn") {
-      // Le serveur a atteint la limite d'itérations — on renvoi pour continuer
-      messages = [
-        { role: "user", content: USER_MESSAGE },
-        { role: "assistant", content: response.content },
-      ];
-      continue;
-    }
-
-    // tool_use : on ajoute la réponse assistant et on reboucle
-    messages.push({ role: "assistant", content: response.content });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[veille/scrape] Anthropic API error:", message);
+    return Response.json({ error: `Erreur API Anthropic : ${message}` }, { status: 500 });
   }
 
   if (!rawText.trim()) {
@@ -106,8 +130,9 @@ export async function GET() {
       resultats = Array.isArray(parsed.resultats) ? parsed.resultats : [];
     }
   } catch {
+    console.error("[veille/scrape] JSON parse error, raw:", rawText.slice(0, 500));
     return Response.json(
-      { error: "Impossible de parser la réponse Claude", raw: rawText },
+      { error: "Impossible de parser la réponse Claude", raw: rawText.slice(0, 500) },
       { status: 500 }
     );
   }
@@ -134,6 +159,7 @@ export async function GET() {
   const { error } = await supabase.from("veille_reglementaire").insert(rows);
 
   if (error) {
+    console.error("[veille/scrape] Supabase insert error:", error.message);
     return Response.json({ error: error.message }, { status: 500 });
   }
 
