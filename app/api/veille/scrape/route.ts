@@ -49,12 +49,16 @@ async function handleScrape() {
       messages: [
         {
           role: "user",
-          content: `Fais 2 recherches web : "réglementation hôtel ERP France 2025 2026" et "normes sécurité incendie piscine hôtel France".
+          content: `Nous sommes le ${new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}. Fais 2 recherches web pour trouver des réglementations françaises publiées dans les 3 derniers mois :
+1. "réglementation hôtel ERP France ${new Date().getFullYear()}"
+2. "normes sécurité incendie piscine hôtel France ${new Date().getFullYear()}"
+
+Ne retiens QUE les textes publiés après le ${new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toLocaleDateString("fr-FR")}. Ignore les anciens résultats.
 
 Retourne UNIQUEMENT ce JSON (max 5 résultats) :
 {"resultats":[{"titre":"...","resume":"ce qui change pour l'hôtel (2 phrases max)","source_url":"...","source_nom":"...","date_publication":"YYYY-MM-DD ou null","date_entree_vigueur":"YYYY-MM-DD ou null","domaine":"Sécurité|Environnement|Technique|Général","impact":"Fort|Moyen|Faible"}]}
 
-Si rien trouvé : {"resultats":[]}`,
+Si rien de récent : {"resultats":[]}`,
         },
       ],
     });
