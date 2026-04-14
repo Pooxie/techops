@@ -22,13 +22,17 @@ import {
   Settings,
   Briefcase,
   HardHat,
+  Newspaper,
   type LucideIcon,
 } from "lucide-react";
 import {
   fetchCurrentUserSummary,
   signOutCurrentUser,
+  createClient,
   type CurrentUserSummary,
 } from "@/lib/supabase";
+
+const HOTEL_ID = "00000000-0000-0000-0000-000000000587";
 
 type NavItem = {
   href: string;
@@ -63,9 +67,10 @@ const navSections: NavSection[] = [
   {
     title: "Réglementaire",
     items: [
-      { href: "/set",             label: "Contrôles SET",      icon: ShieldCheck },
-      { href: "/non-conformites", label: "Non-conformités",    icon: AlertTriangle },
-      { href: "/piscine",         label: "Registre sanitaire", icon: Droplets },
+      { href: "/set",             label: "Contrôles SET",        icon: ShieldCheck },
+      { href: "/non-conformites", label: "Non-conformités",      icon: AlertTriangle },
+      { href: "/piscine",         label: "Registre sanitaire",   icon: Droplets },
+      { href: "/veille",          label: "Veille Réglementaire", icon: Newspaper },
     ],
   },
   {
@@ -98,6 +103,7 @@ export default function Sidebar() {
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [signingOut, setSigningOut] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [veilleBadge, setVeilleBadge] = useState(0);
   useEffect(() => {
     let active = true;
     fetchCurrentUserSummary()
@@ -118,6 +124,24 @@ export default function Sidebar() {
       active = false;
     };
   }, []);
+
+  // Badge veille : nombre d'articles non lus
+  useEffect(() => {
+    let active = true;
+    const supabase = createClient();
+    supabase
+      .from("veille_reglementaire")
+      .select("id", { count: "exact", head: true })
+      .eq("hotel_id", HOTEL_ID)
+      .eq("lu", false)
+      .then(({ count }) => {
+        if (!active) return;
+        setVeilleBadge(count ?? 0);
+      });
+    return () => {
+      active = false;
+    };
+  }, [pathname]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -276,7 +300,23 @@ export default function Sidebar() {
                         strokeWidth={isActive ? 2.5 : 2}
                         style={{ flexShrink: 0 }}
                       />
-                      {item.label}
+                      <span style={{ flex: 1 }}>{item.label}</span>
+                      {item.href === "/veille" && veilleBadge > 0 && (
+                        <span
+                          style={{
+                            backgroundColor: "#FF3B30",
+                            color: "#FFFFFF",
+                            borderRadius: 10,
+                            padding: "1px 7px",
+                            fontSize: 11,
+                            fontWeight: 700,
+                            lineHeight: 1.6,
+                            flexShrink: 0,
+                          }}
+                        >
+                          {veilleBadge}
+                        </span>
+                      )}
                     </Link>
                   </li>
                 );
