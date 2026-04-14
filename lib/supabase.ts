@@ -156,6 +156,7 @@ export type SetCategorie = {
   id: string;
   nom: string;
   ordre: number;
+  theme_name?: string | null;
   controles: SetControle[];
 };
 
@@ -177,7 +178,7 @@ export async function fetchSetCategories(): Promise<SetCategorie[]> {
   const [{ data: cats }, { data: controles }] = await Promise.all([
     supabase
       .from("set_categories")
-      .select("id, nom, ordre")
+      .select("id, nom, ordre, theme_name")
       .order("ordre", { ascending: true }),
     supabase
       .from("set_controles")
@@ -213,8 +214,11 @@ export async function fetchSetCategories(): Promise<SetCategorie[]> {
     id: cat.id,
     nom: cat.nom,
     ordre: cat.ordre,
+    theme_name: (cat as { theme_name?: string | null }).theme_name ?? null,
     controles: (controlesMap.get(cat.id) ?? []).map((c) => ({
       ...c,
+      // Si le contrôle n'a pas de theme_name, hériter de la catégorie parente
+      theme_name: c.theme_name ?? (cat as { theme_name?: string | null }).theme_name ?? null,
       categorie_nom: cat.nom,
     })),
   }));
