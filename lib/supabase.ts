@@ -138,6 +138,18 @@ export type SetControle = {
   non_conformites: number;
   non_conformites_restantes: number;
   notes: string | null;
+  theme_name?: string | null;
+};
+
+export type SetVisite = {
+  id: string;
+  controle_id: string;
+  date_visite: string;
+  prestataire: string | null;
+  non_conformites: number;
+  non_conformites_restantes: number;
+  notes: string | null;
+  created_at: string;
 };
 
 export type SetCategorie = {
@@ -169,7 +181,7 @@ export async function fetchSetCategories(): Promise<SetCategorie[]> {
       .order("ordre", { ascending: true }),
     supabase
       .from("set_controles")
-      .select("id, nom, categorie_id, type_intervenant, periodicite_mois, prestataire, date_derniere_visite, date_prochaine, non_conformites, non_conformites_restantes, notes")
+      .select("id, nom, categorie_id, type_intervenant, periodicite_mois, prestataire, date_derniere_visite, date_prochaine, non_conformites, non_conformites_restantes, notes, theme_name")
       .order("nom", { ascending: true }),
   ]);
 
@@ -192,6 +204,7 @@ export async function fetchSetCategories(): Promise<SetCategorie[]> {
       non_conformites: c.non_conformites ?? 0,
       non_conformites_restantes: c.non_conformites_restantes ?? 0,
       notes: c.notes,
+      theme_name: c.theme_name ?? null,
     });
     controlesMap.set(c.categorie_id, list);
   }
@@ -356,6 +369,39 @@ export async function updateSetControle(payload: UpdateSetControlePayload): Prom
     })
     .eq("id", payload.id);
 
+  if (error) throw error;
+}
+
+// ─── SET Visites ──────────────────────────────────────────────────────────────
+
+export async function fetchSetVisites(controleId: string): Promise<SetVisite[]> {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("set_visites")
+    .select("*")
+    .eq("controle_id", controleId)
+    .order("date_visite", { ascending: false })
+    .limit(20);
+  return (data ?? []) as SetVisite[];
+}
+
+export async function saveSetVisite(payload: {
+  controle_id: string;
+  date_visite: string;
+  prestataire: string;
+  non_conformites: number;
+  non_conformites_restantes: number;
+  notes: string;
+}): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.from("set_visites").insert({
+    controle_id: payload.controle_id,
+    date_visite: payload.date_visite,
+    prestataire: payload.prestataire || null,
+    non_conformites: payload.non_conformites,
+    non_conformites_restantes: payload.non_conformites_restantes,
+    notes: payload.notes || null,
+  });
   if (error) throw error;
 }
 

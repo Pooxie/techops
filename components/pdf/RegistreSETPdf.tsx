@@ -164,9 +164,10 @@ function statutColor(s: string): { bg: string; text: string; label: string } {
 type Props = {
   categories: SetCategorie[];
   generatedBy?: string;
+  title?: string;
 };
 
-export function RegistreSETPdf({ categories, generatedBy = "TechOps" }: Props) {
+export function RegistreSETPdf({ categories, generatedBy = "TechOps", title }: Props) {
   const allControles = categories.flatMap((c) => c.controles);
   const total   = allControles.length;
   const retard  = allControles.filter((c) => c.statut === "retard").length;
@@ -195,7 +196,7 @@ export function RegistreSETPdf({ categories, generatedBy = "TechOps" }: Props) {
         <View style={s.header} fixed>
           <View style={s.headerLeft}>
             <Text style={s.headerLogo}>TechOps</Text>
-            <Text style={s.headerTitle}>Registre réglementaire</Text>
+            <Text style={s.headerTitle}>{title ?? "Registre réglementaire"}</Text>
             <Text style={s.headerHotel}>Sofitel Golfe d'Ajaccio Thalasso Sea &amp; Spa</Text>
           </View>
           <View style={s.headerRight}>
