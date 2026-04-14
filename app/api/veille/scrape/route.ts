@@ -5,7 +5,10 @@ export const maxDuration = 60;
 
 const HOTEL_ID = "00000000-0000-0000-0000-000000000587";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+  maxRetries: 0, // Fail fast — pas de retry silencieux qui fait hang la requête
+});
 
 type VeilleResult = {
   titre: string;
@@ -23,32 +26,12 @@ Tu utilises la recherche web pour trouver les nouvelles réglementations frança
 Tu te concentres sur un hôtel 4-5 étoiles avec spa, piscines et thalasso.
 À la fin de tes recherches, tu réponds UNIQUEMENT avec un JSON valide, sans aucun texte autour.`;
 
-const USER_MESSAGE = `Effectue plusieurs recherches web pour trouver les nouvelles réglementations françaises récentes (publiées dans les 6 derniers mois) concernant :
-- Les hôtels ERP (Établissements Recevant du Public)
-- La sécurité incendie dans les hôtels
-- Les normes piscines collectives hôtelières
-- L'environnement et l'énergie pour les établissements hôteliers
-- Les obligations légales des hôtels 4-5 étoiles en France
+const USER_MESSAGE = `Recherche les nouvelles réglementations françaises (6 derniers mois) pour les hôtels ERP 4-5 étoiles avec spa et piscine. Fais 2-3 recherches : "réglementation hôtel ERP 2025 2026", "normes sécurité incendie hôtel France", "obligations hôtel piscine spa réglementation".
 
-Fais au moins 3 recherches différentes (ex: "réglementation hôtel ERP 2025 2026", "nouvelles normes sécurité incendie hôtel France", "obligations hôtel spa piscine réglementation française").
+Retourne UNIQUEMENT ce JSON :
+{"resultats":[{"titre":"...","resume":"ce qui change pour l'hôtel","source_url":"...","source_nom":"...","date_publication":"YYYY-MM-DD ou null","date_entree_vigueur":"YYYY-MM-DD ou null","domaine":"Sécurité|Environnement|Technique|Général","impact":"Fort|Moyen|Faible"}]}
 
-Ensuite, retourne uniquement ce JSON avec les éléments pertinents trouvés :
-{
-  "resultats": [
-    {
-      "titre": "titre court et clair",
-      "resume": "explication en langage simple — ce qui change concrètement pour l'hôtel",
-      "source_url": "url exacte de la source",
-      "source_nom": "nom de la source (ex: Légifrance, Journal Officiel...)",
-      "date_publication": "YYYY-MM-DD ou null",
-      "date_entree_vigueur": "YYYY-MM-DD ou null",
-      "domaine": "Sécurité|Environnement|Technique|Général",
-      "impact": "Fort|Moyen|Faible"
-    }
-  ]
-}
-
-Si aucun élément pertinent → retourner { "resultats": [] }`;
+Si rien → {"resultats":[]}`;
 
 export async function GET() {
   try {
@@ -77,7 +60,7 @@ async function handleScrape() {
     for (let i = 0; i < MAX_ITERATIONS; i++) {
       const response = await anthropic.messages.create({
         model: "claude-sonnet-4-6",
-        max_tokens: 4000,
+        max_tokens: 2000,
         system: SYSTEM_PROMPT,
         tools: [
           { type: "web_search_20260209", name: "web_search" } as unknown as Anthropic.Tool,
