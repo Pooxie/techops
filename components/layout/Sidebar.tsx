@@ -18,6 +18,7 @@ import {
   BedDouble,
   Droplets,
   Receipt,
+  Gauge,
   Brain,
   Settings,
   Briefcase,
@@ -50,9 +51,9 @@ const navSections: NavSection[] = [
   {
     title: "Tableau de bord",
     items: [
-      { href: "/dashboard", label: "Tableau de bord",  icon: LayoutDashboard },
-      { href: "/cerveau",   label: "Cerveau IA",        icon: Brain },
-      { href: "/plan",      label: "Plan de l'hôtel",   icon: Map },
+      { href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard },
+      { href: "/cerveau",   label: "Cerveau IA",       icon: Brain },
+      { href: "/plan",      label: "Plan de l'hôtel",  icon: Map },
     ],
   },
   {
@@ -86,6 +87,7 @@ const navSections: NavSection[] = [
     title: "Finances",
     items: [
       { href: "/depenses", label: "Dépenses & Factures", icon: Receipt },
+      { href: "/fuel",     label: "Suivi Fuel",          icon: Gauge },
     ],
   },
 ];
@@ -104,28 +106,16 @@ export default function Sidebar() {
   const [signingOut, setSigningOut] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [veilleBadge, setVeilleBadge] = useState(0);
+
   useEffect(() => {
     let active = true;
     fetchCurrentUserSummary()
-      .then((user) => {
-        if (!active) return;
-        setProfile(user);
-      })
-      .catch(() => {
-        if (!active) return;
-        setProfileError("Impossible de charger le profil.");
-      })
-      .finally(() => {
-        if (!active) return;
-        setLoadingProfile(false);
-      });
-
-    return () => {
-      active = false;
-    };
+      .then((user) => { if (!active) return; setProfile(user); })
+      .catch(() => { if (!active) return; setProfileError("Impossible de charger le profil."); })
+      .finally(() => { if (!active) return; setLoadingProfile(false); });
+    return () => { active = false; };
   }, []);
 
-  // Badge veille : nombre d'articles non lus
   useEffect(() => {
     let active = true;
     const supabase = createClient();
@@ -134,13 +124,8 @@ export default function Sidebar() {
       .select("id", { count: "exact", head: true })
       .eq("hotel_id", HOTEL_ID)
       .eq("lu", false)
-      .then(({ count }) => {
-        if (!active) return;
-        setVeilleBadge(count ?? 0);
-      });
-    return () => {
-      active = false;
-    };
+      .then(({ count }) => { if (!active) return; setVeilleBadge(count ?? 0); });
+    return () => { active = false; };
   }, [pathname]);
 
   useEffect(() => {
@@ -149,7 +134,6 @@ export default function Sidebar() {
         setMenuOpen(false);
       }
     }
-
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
@@ -179,7 +163,7 @@ export default function Sidebar() {
       style={{
         width: "var(--sidebar-width)",
         backgroundColor: "#FFFFFF",
-        borderRight: "1px solid rgba(0,0,0,0.06)",
+        borderRight: "1px solid #E8E6E1",
       }}
     >
       {/* Logo */}
@@ -189,39 +173,17 @@ export default function Sidebar() {
           padding: "0 20px",
           display: "flex",
           alignItems: "center",
-          gap: 10,
-          borderBottom: "1px solid rgba(0,0,0,0.06)",
+          borderBottom: "1px solid #E8E6E1",
+          flexShrink: 0,
         }}
       >
-        {/* Logo Sofitel — deux losanges arrondis entrelacés */}
-        <div
-          style={{
-            width: 44,
-            height: 30,
-            borderRadius: 10,
-            background: "linear-gradient(135deg, #2563EB, #1D4ED8)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flexShrink: 0,
-            boxShadow: "0 2px 8px rgba(37,99,235,0.30)",
-          }}
-        >
-          <svg width="28" height="18" viewBox="0 0 28 18" fill="none">
-            <rect x="-6" y="-6" width="12" height="12" rx="4.5"
-              transform="translate(9,9) scale(1,0.78) rotate(45)"
-              stroke="white" strokeWidth="2.2"/>
-            <rect x="-6" y="-6" width="12" height="12" rx="4.5"
-              transform="translate(17,9) scale(1,0.78) rotate(45)"
-              stroke="white" strokeWidth="2.2"/>
-          </svg>
-        </div>
         <span
           style={{
-            fontSize: 16,
-            fontWeight: 700,
-            color: "#1D1D1F",
-            letterSpacing: "-0.3px",
+            fontFamily: "var(--font-cormorant), Georgia, serif",
+            fontSize: 22,
+            fontWeight: 500,
+            letterSpacing: "0.02em",
+            color: "#1A1A18",
           }}
         >
           TechOps
@@ -233,7 +195,7 @@ export default function Sidebar() {
         style={{
           flex: 1,
           overflowY: "auto",
-          padding: "16px 12px",
+          padding: "16px 10px",
         }}
       >
         {navSections.map((section, idx) => (
@@ -241,13 +203,13 @@ export default function Sidebar() {
             <p
               style={{
                 fontSize: 10,
-                fontWeight: 700,
-                letterSpacing: "0.9px",
+                fontWeight: 500,
+                letterSpacing: "0.1em",
                 textTransform: "uppercase",
-                color: "rgba(142,142,147,0.55)",
-                padding: "0 10px",
+                color: "#9C9C8E",
+                padding: "0 12px",
                 marginBottom: 4,
-                marginTop: idx === 0 ? 0 : 16,
+                marginTop: idx === 0 ? 0 : 24,
               }}
             >
               {section.title}
@@ -272,44 +234,48 @@ export default function Sidebar() {
                       style={{
                         display: "flex",
                         alignItems: "center",
-                        gap: 9,
-                        padding: "7px 10px",
-                        borderRadius: 9,
-                        fontSize: 13.5,
-                        fontWeight: isActive ? 600 : 400,
-                        color: isActive ? "#2563EB" : "#6E6E73",
-                        backgroundColor: isActive ? "#EFF6FF" : "transparent",
+                        gap: 8,
+                        padding: "0 12px",
+                        height: 36,
+                        borderRadius: 8,
+                        fontSize: 13,
+                        fontWeight: isActive ? 500 : 400,
+                        color: isActive ? "#7A5C2E" : "#6B6B5F",
+                        backgroundColor: isActive ? "#F5EFE6" : "transparent",
                         textDecoration: "none",
-                        transition: "background 0.12s, color 0.12s",
+                        transition: "background 150ms ease, color 150ms ease",
                       }}
                       onMouseEnter={(e) => {
                         if (!isActive) {
-                          (e.currentTarget as HTMLElement).style.backgroundColor = "#F5F5F7";
-                          (e.currentTarget as HTMLElement).style.color = "#1D1D1F";
+                          (e.currentTarget as HTMLElement).style.backgroundColor = "#F4F3F0";
+                          (e.currentTarget as HTMLElement).style.color = "#1A1A18";
                         }
                       }}
                       onMouseLeave={(e) => {
                         if (!isActive) {
                           (e.currentTarget as HTMLElement).style.backgroundColor = "transparent";
-                          (e.currentTarget as HTMLElement).style.color = "#6E6E73";
+                          (e.currentTarget as HTMLElement).style.color = "#6B6B5F";
                         }
                       }}
                     >
                       <Icon
-                        size={15}
-                        strokeWidth={isActive ? 2.5 : 2}
-                        style={{ flexShrink: 0 }}
+                        size={16}
+                        strokeWidth={1.5}
+                        style={{
+                          flexShrink: 0,
+                          color: isActive ? "#C4A882" : "inherit",
+                        }}
                       />
                       <span style={{ flex: 1 }}>{item.label}</span>
                       {item.href === "/veille" && veilleBadge > 0 && (
                         <span
                           style={{
-                            backgroundColor: "#FF3B30",
+                            backgroundColor: "#B83232",
                             color: "#FFFFFF",
-                            borderRadius: 10,
+                            borderRadius: 9999,
                             padding: "1px 7px",
                             fontSize: 11,
-                            fontWeight: 700,
+                            fontWeight: 500,
                             lineHeight: 1.6,
                             flexShrink: 0,
                           }}
@@ -331,42 +297,43 @@ export default function Sidebar() {
         ref={menuRef}
         style={{
           position: "relative",
-          padding: "12px 16px 16px",
-          borderTop: "1px solid rgba(0,0,0,0.06)",
+          padding: "12px 12px 16px",
+          borderTop: "1px solid #E8E6E1",
+          flexShrink: 0,
         }}
       >
         {menuOpen && (
           <div
             style={{
               position: "absolute",
-              left: 16,
-              right: 16,
+              left: 12,
+              right: 12,
               bottom: "calc(100% + 8px)",
               backgroundColor: "#FFFFFF",
               borderRadius: 16,
-              border: "1px solid rgba(0,0,0,0.08)",
-              boxShadow: "0 12px 30px rgba(0,0,0,0.14)",
+              border: "1px solid #E8E6E1",
+              boxShadow: "0 8px 24px rgba(26,26,24,0.10)",
               padding: 8,
             }}
           >
             <div
               style={{
                 padding: "10px 12px 12px",
-                borderBottom: "1px solid rgba(0,0,0,0.06)",
+                borderBottom: "1px solid #E8E6E1",
                 marginBottom: 6,
               }}
             >
-              <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#1D1D1F" }}>
+              <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: "#1A1A18" }}>
                 {profile ? `${profile.prenom} ${profile.nom}` : "Compte connecté"}
               </p>
-              <p style={{ margin: "3px 0 0", fontSize: 11, color: "#8E8E93" }}>
+              <p style={{ margin: "3px 0 0", fontSize: 11, color: "#9C9C8E" }}>
                 La déconnexion fermera la session active sur cet appareil.
               </p>
             </div>
 
             {profile?.email && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", color: "#6E6E73" }}>
-                <Mail size={14} />
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", color: "#6B6B5F" }}>
+                <Mail size={14} strokeWidth={1.5} />
                 <span style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {profile.email}
                 </span>
@@ -374,11 +341,9 @@ export default function Sidebar() {
             )}
 
             {profile?.role && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", color: "#6E6E73" }}>
-                <ShieldCheck size={14} />
-                <span style={{ fontSize: 12 }}>
-                  {roleLabel(profile.role)}
-                </span>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", color: "#6B6B5F" }}>
+                <ShieldCheck size={14} strokeWidth={1.5} />
+                <span style={{ fontSize: 12 }}>{roleLabel(profile.role)}</span>
               </div>
             )}
 
@@ -387,9 +352,9 @@ export default function Sidebar() {
                 style={{
                   margin: "6px 8px 8px",
                   padding: "10px 12px",
-                  borderRadius: 10,
-                  backgroundColor: "#FFF1F0",
-                  color: "#B42318",
+                  borderRadius: 8,
+                  backgroundColor: "#FAE8E8",
+                  color: "#B83232",
                   fontSize: 12,
                 }}
               >
@@ -408,17 +373,18 @@ export default function Sidebar() {
                 alignItems: "center",
                 justifyContent: "center",
                 gap: 8,
-                border: "1px solid rgba(255,59,48,0.18)",
-                backgroundColor: "#FFF1F0",
-                color: "#FF3B30",
-                borderRadius: 12,
-                padding: "11px 12px",
+                border: "1px solid #E8E6E1",
+                backgroundColor: "#FAE8E8",
+                color: "#B83232",
+                borderRadius: 8,
+                padding: "10px 12px",
                 fontSize: 13,
-                fontWeight: 700,
+                fontWeight: 500,
                 cursor: signingOut ? "not-allowed" : "pointer",
+                transition: "150ms ease",
               }}
             >
-              <LogOut size={14} />
+              <LogOut size={14} strokeWidth={1.5} />
               {signingOut ? "Déconnexion..." : "Se déconnecter"}
             </button>
           </div>
@@ -426,7 +392,7 @@ export default function Sidebar() {
 
         <button
           type="button"
-          onClick={() => setMenuOpen((value) => !value)}
+          onClick={() => setMenuOpen((v) => !v)}
           style={{
             width: "100%",
             display: "flex",
@@ -444,18 +410,17 @@ export default function Sidebar() {
         >
           <div
             style={{
-              width: 34,
-              height: 34,
+              width: 32,
+              height: 32,
               borderRadius: "50%",
-              background: "linear-gradient(135deg, #2563EB, #1D4ED8)",
+              backgroundColor: "#F5EFE6",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: 12,
-              fontWeight: 700,
-              color: "#FFFFFF",
+              fontSize: 11,
+              fontWeight: 600,
+              color: "#7A5C2E",
               flexShrink: 0,
-              boxShadow: "0 2px 6px rgba(37,99,235,0.25)",
             }}
           >
             {initials}
@@ -464,8 +429,8 @@ export default function Sidebar() {
             <p
               style={{
                 fontSize: 13,
-                fontWeight: 600,
-                color: "#1D1D1F",
+                fontWeight: 500,
+                color: "#1A1A18",
                 margin: 0,
                 overflow: "hidden",
                 textOverflow: "ellipsis",
@@ -477,7 +442,7 @@ export default function Sidebar() {
             <p
               style={{
                 fontSize: 11,
-                color: "#AEAEB2",
+                color: "#9C9C8E",
                 margin: 0,
                 overflow: "hidden",
                 textOverflow: "ellipsis",
@@ -488,12 +453,13 @@ export default function Sidebar() {
             </p>
           </div>
           <ChevronUp
-            size={16}
-            color="#AEAEB2"
+            size={14}
+            color="#9C9C8E"
+            strokeWidth={1.5}
             style={{
               flexShrink: 0,
               transform: menuOpen ? "rotate(0deg)" : "rotate(180deg)",
-              transition: "transform 0.15s ease",
+              transition: "transform 150ms ease",
             }}
           />
         </button>

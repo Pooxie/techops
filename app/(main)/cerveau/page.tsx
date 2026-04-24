@@ -4,9 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import {
   Brain, RefreshCw, Send, Loader2, Trash2, Plus,
   ChevronDown, Phone, Clock, CheckCircle, Zap, Mail,
-  Download, Wind, Droplets, Eye, Thermometer,
+  Download,
 } from "lucide-react";
 import Header from "@/components/layout/Header";
+import MeteoCard from "@/components/meteo/MeteoCard";
+import MeteoMarineCard from "@/components/meteo/MeteoMarineCard";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -28,44 +30,16 @@ type ChatMessage = { role: "user" | "assistant"; content: string; ts: number };
 
 type Memory = { id: string; contenu: string; tags: string[]; created_at: string };
 
-type MeteoData = {
-  temp: number;
-  feels_like: number;
-  humidity: number;
-  pressure: number;
-  wind_speed: number;
-  wind_deg: number;
-  description: string;
-  icon: string;
-  main: string;
-  visibility: number;
-  prochains: { heure: string; temp: number; icon: string; desc: string }[];
-};
-
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
 const PRIORITE_CONFIG: Record<ActionPriorite, { color: string; bg: string; border: string; label: string }> = {
   urgent:     { color: "#991B1B", bg: "#FEF2F2", border: "#EF4444", label: "URGENT" },
   important:  { color: "#92400E", bg: "#FFFBEB", border: "#F59E0B", label: "IMPORTANT" },
-  surveiller: { color: "#1E40AF", bg: "#EFF6FF", border: "#3B82F6", label: "SURVEILLER" },
+  surveiller: { color: "#1E40AF", bg: "#F5EFE6", border: "#3B82F6", label: "SURVEILLER" },
   ok:         { color: "#065F46", bg: "#ECFDF5", border: "#10B981", label: "RAS" },
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function weatherEmoji(icon: string): string {
-  const code = icon.replace("d", "").replace("n", "");
-  const map: Record<string, string> = {
-    "01": "☀️", "02": "⛅", "03": "🌥️", "04": "☁️",
-    "09": "🌧️", "10": "🌦️", "11": "⛈️", "13": "❄️", "50": "🌫️",
-  };
-  return map[code] ?? "🌡️";
-}
-
-function windDirection(deg: number): string {
-  const dirs = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"];
-  return dirs[Math.round(deg / 45) % 8];
-}
 
 function renderBriefing(text: string): React.ReactNode[] {
   return text.split("\n").map((line, i) => {
@@ -124,26 +98,6 @@ const pageStyles = `
     align-items: start;
   }
 
-  .meteo-inner {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 16px;
-  }
-
-  .meteo-details {
-    display: flex;
-    gap: 20px;
-    flex-wrap: wrap;
-  }
-
-  .meteo-forecast {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-
   .action-row-btn {
     width: 100%;
     display: flex;
@@ -169,18 +123,6 @@ const pageStyles = `
     .cerveau-side-grid {
       grid-template-columns: 1fr;
     }
-
-    .meteo-inner {
-      gap: 12px;
-    }
-
-    .meteo-details {
-      gap: 14px;
-    }
-
-    .meteo-forecast {
-      gap: 8px;
-    }
   }
 
   @media (max-width: 480px) {
@@ -189,87 +131,6 @@ const pageStyles = `
     }
   }
 `;
-
-// ─── Bloc Météo ────────────────────────────────────────────────────────────────
-
-function MeteoCard() {
-  const [meteo, setMeteo] = useState<MeteoData | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/cerveau/meteo")
-      .then((r) => r.json() as Promise<MeteoData>)
-      .then((d) => { if (!("error" in d)) setMeteo(d); })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
-
-  if (loading) return (
-    <div style={{ backgroundColor: "#FFFFFF", borderRadius: 14, padding: "14px 20px", boxShadow: "0 2px 8px rgba(0,0,0,0.06)", display: "flex", alignItems: "center", gap: 10 }}>
-      <Loader2 size={16} color="#9CA3AF" style={{ animation: "spin 1s linear infinite" }} />
-      <span style={{ fontSize: 13, color: "#9CA3AF" }}>Météo Ajaccio…</span>
-    </div>
-  );
-
-  if (!meteo) return null;
-
-  return (
-    <div style={{
-      background: "linear-gradient(135deg, #0EA5E9 0%, #0284C7 100%)",
-      borderRadius: 16, padding: "18px 22px",
-      boxShadow: "0 4px 16px rgba(14,165,233,0.3)",
-      color: "#FFFFFF",
-    }}>
-      <div className="meteo-inner">
-
-        {/* Principal */}
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <span style={{ fontSize: 52, lineHeight: 1 }}>{weatherEmoji(meteo.icon)}</span>
-          <div>
-            <p style={{ margin: 0, fontSize: 11, fontWeight: 600, letterSpacing: "0.5px", color: "#BAE6FD", textTransform: "uppercase" }}>Ajaccio</p>
-            <p style={{ margin: 0, fontSize: 38, fontWeight: 800, lineHeight: 1.1 }}>
-              {meteo.temp}°<span style={{ fontSize: 20 }}>C</span>
-            </p>
-            <p style={{ margin: "2px 0 0", fontSize: 13, color: "#E0F2FE", textTransform: "capitalize" }}>{meteo.description}</p>
-          </div>
-        </div>
-
-        {/* Détails */}
-        <div className="meteo-details">
-          <MeteoStat icon={<Thermometer size={14} />} label="Ressenti" value={`${meteo.feels_like}°C`} />
-          <MeteoStat icon={<Droplets size={14} />} label="Humidité" value={`${meteo.humidity}%`} />
-          <MeteoStat icon={<Wind size={14} />} label="Vent" value={`${meteo.wind_speed} km/h ${windDirection(meteo.wind_deg)}`} />
-          <MeteoStat icon={<Eye size={14} />} label="Visibilité" value={`${meteo.visibility} km`} />
-        </div>
-
-        {/* Prévisions 3h */}
-        {meteo.prochains.length > 0 && (
-          <div className="meteo-forecast">
-            {meteo.prochains.map((p, i) => (
-              <div key={i} style={{ textAlign: "center", padding: "8px 12px", backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 12, minWidth: 56 }}>
-                <p style={{ margin: 0, fontSize: 11, color: "#BAE6FD" }}>{p.heure}</p>
-                <p style={{ margin: "4px 0", fontSize: 20 }}>{weatherEmoji(p.icon)}</p>
-                <p style={{ margin: 0, fontSize: 13, fontWeight: 700 }}>{p.temp}°</p>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function MeteoStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 4, color: "#BAE6FD" }}>
-        {icon}
-        <span style={{ fontSize: 11 }}>{label}</span>
-      </div>
-      <span style={{ fontSize: 14, fontWeight: 700 }}>{value}</span>
-    </div>
-  );
-}
 
 // ─── Bloc Briefing ────────────────────────────────────────────────────────────
 
@@ -318,7 +179,7 @@ function BriefingCard() {
 
   return (
     <div style={{
-      background: "linear-gradient(135deg, #1E3A8A 0%, #1D4ED8 60%, #2563EB 100%)",
+      background: "#1A1A18",
       borderRadius: 20, padding: "24px 28px", color: "#FFFFFF",
       position: "relative", overflow: "hidden",
     }}>
@@ -386,7 +247,7 @@ function ActionRow({ action, onFait, onCreerIntervention }: {
   return (
     <div style={{
       borderRadius: 10,
-      border: `1px solid ${open ? cfg.border + "55" : "rgba(0,0,0,0.08)"}`,
+      border: `1px solid ${open ? cfg.border + "55" : "rgba(26,26,24,0.06)"}`,
       overflow: "hidden",
       transition: "border-color 0.15s",
     }}>
@@ -498,7 +359,7 @@ function ActionsBlock() {
   }
 
   return (
-    <div style={{ backgroundColor: "#FFFFFF", borderRadius: 16, padding: 20, boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
+    <div style={{ backgroundColor: "#FFFFFF", borderRadius: 16, padding: 20, boxShadow: "0 2px 8px rgba(26,26,24,0.06)" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#111827" }}>Actions du jour</h3>
@@ -605,9 +466,9 @@ function ChatBlock() {
   ];
 
   return (
-    <div style={{ backgroundColor: "#FFFFFF", borderRadius: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.06)", overflow: "hidden" }}>
-      <div style={{ padding: "16px 20px", borderBottom: "1px solid rgba(0,0,0,0.06)", display: "flex", alignItems: "center", gap: 8 }}>
-        <Brain size={17} color="#2563EB" />
+    <div style={{ backgroundColor: "#FFFFFF", borderRadius: 16, boxShadow: "0 2px 8px rgba(26,26,24,0.06)", overflow: "hidden" }}>
+      <div style={{ padding: "16px 20px", borderBottom: "1px solid rgba(26,26,24,0.06)", display: "flex", alignItems: "center", gap: 8 }}>
+        <Brain size={17} color="#C4A882" />
         <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#111827" }}>Demande à TechOps</h3>
       </div>
 
@@ -628,7 +489,7 @@ function ChatBlock() {
             <div key={msg.ts} style={{ display: "flex", flexDirection: msg.role === "user" ? "row-reverse" : "row", gap: 8, alignItems: "flex-end" }}>
               <div style={{
                 maxWidth: "80%",
-                backgroundColor: msg.role === "user" ? "#2563EB" : "#F3F4F6",
+                backgroundColor: msg.role === "user" ? "#C4A882" : "#F3F4F6",
                 color: msg.role === "user" ? "#FFFFFF" : "#111827",
                 borderRadius: msg.role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
                 padding: "9px 13px", fontSize: 13.5, lineHeight: 1.6, whiteSpace: "pre-wrap",
@@ -648,7 +509,7 @@ function ChatBlock() {
         <div ref={bottomRef} />
       </div>
 
-      <div style={{ padding: "10px 14px", borderTop: "1px solid rgba(0,0,0,0.06)", display: "flex", gap: 8, alignItems: "flex-end" }}>
+      <div style={{ padding: "10px 14px", borderTop: "1px solid rgba(26,26,24,0.06)", display: "flex", gap: 8, alignItems: "flex-end" }}>
         <textarea
           value={input} onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }}
@@ -658,7 +519,7 @@ function ChatBlock() {
         />
         <button onClick={send} disabled={loading || !input.trim()} style={{
           width: 38, height: 38, borderRadius: 10, border: "none",
-          background: loading || !input.trim() ? "#E5E7EB" : "linear-gradient(135deg, #2563EB, #1D4ED8)",
+          background: loading || !input.trim() ? "#EEECEA" : "#1A1A18",
           display: "flex", alignItems: "center", justifyContent: "center",
           cursor: loading || !input.trim() ? "not-allowed" : "pointer", flexShrink: 0,
         }}>
@@ -738,9 +599,9 @@ function RapportBlock() {
   }
 
   return (
-    <div style={{ backgroundColor: "#FFFFFF", borderRadius: 16, padding: 20, boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
+    <div style={{ backgroundColor: "#FFFFFF", borderRadius: 16, padding: 20, boxShadow: "0 2px 8px rgba(26,26,24,0.06)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-        <Mail size={17} color="#2563EB" />
+        <Mail size={17} color="#C4A882" />
         <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#111827" }}>Rapport Hebdomadaire</h3>
       </div>
 
@@ -756,7 +617,7 @@ function RapportBlock() {
           style={{
             display: "flex", alignItems: "center", gap: 7,
             padding: "9px 16px", borderRadius: 10, border: "none",
-            background: loading ? "#E5E7EB" : "linear-gradient(135deg, #059669, #047857)",
+            background: loading ? "#EEECEA" : "linear-gradient(135deg, #2D6A4F, #2D6A4F)",
             color: loading ? "#9CA3AF" : "#FFFFFF",
             fontSize: 13, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer",
             boxShadow: loading ? "none" : "0 2px 8px rgba(5,150,105,0.25)",
@@ -772,7 +633,7 @@ function RapportBlock() {
           style={{
             display: "flex", alignItems: "center", gap: 7,
             padding: "9px 16px", borderRadius: 10,
-            border: "1px solid #E5E7EB",
+            border: "1px solid #EEECEA",
             background: loading ? "#F9FAFB" : "#FFFFFF",
             color: loading ? "#9CA3AF" : "#374151",
             fontSize: 13, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer",
@@ -788,7 +649,7 @@ function RapportBlock() {
             style={{
               display: "flex", alignItems: "center", gap: 6,
               padding: "9px 14px", borderRadius: 10, border: "1px solid #DBEAFE",
-              backgroundColor: "#EFF6FF", color: "#1D4ED8",
+              backgroundColor: "#F5EFE6", color: "#B8976E",
               fontSize: 13, fontWeight: 600, cursor: "pointer",
             }}
           >
@@ -800,7 +661,7 @@ function RapportBlock() {
       {result && (
         <div style={{
           marginTop: 12,
-          backgroundColor: result.emailSent ? "#ECFDF5" : result.emailError?.includes("RESEND") ? "#FFFBEB" : result.emailError ? "#FEF2F2" : "#F0FDF4",
+          backgroundColor: result.emailSent ? "#ECFDF5" : result.emailError?.includes("RESEND") ? "#FFFBEB" : result.emailError ? "#FEF2F2" : "#EAF4EE",
           borderRadius: 10, padding: "10px 14px",
           border: `1px solid ${result.emailSent ? "#6EE7B7" : result.emailError?.includes("RESEND") ? "#FCD34D" : result.emailError ? "#FCA5A5" : "#6EE7B7"}`,
         }}>
@@ -816,7 +677,7 @@ function RapportBlock() {
           {result.stats && (
             <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
               {Object.entries(result.stats).map(([k, v]) => (
-                <span key={k} style={{ fontSize: 11, color: "#374151", backgroundColor: "rgba(0,0,0,0.06)", borderRadius: 6, padding: "2px 8px" }}>
+                <span key={k} style={{ fontSize: 11, color: "#374151", backgroundColor: "rgba(26,26,24,0.06)", borderRadius: 6, padding: "2px 8px" }}>
                   {k}: {String(v)}
                 </span>
               ))}
@@ -867,9 +728,9 @@ function MemoireBlock() {
   }
 
   return (
-    <div style={{ backgroundColor: "#FFFFFF", borderRadius: 16, padding: 24, boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
+    <div style={{ backgroundColor: "#FFFFFF", borderRadius: 16, padding: 24, boxShadow: "0 2px 8px rgba(26,26,24,0.06)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-        <Brain size={17} color="#7C3AED" />
+        <Brain size={17} color="#3A5F8B" />
         <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#111827" }}>Mémoire du Directeur Technique</h3>
       </div>
       <p style={{ margin: "0 0 14px", fontSize: 13, color: "#9CA3AF", lineHeight: 1.5 }}>
@@ -888,7 +749,7 @@ function MemoireBlock() {
         <button onClick={addMemory} disabled={saving || !newNote.trim()} style={{
           display: "flex", alignItems: "center", gap: 5,
           padding: "9px 16px", borderRadius: 9, border: "none", height: "fit-content",
-          background: saving || !newNote.trim() ? "#E5E7EB" : "#7C3AED",
+          background: saving || !newNote.trim() ? "#EEECEA" : "#1A1A18",
           color: saving || !newNote.trim() ? "#9CA3AF" : "#FFFFFF",
           fontSize: 13, fontWeight: 600, cursor: saving || !newNote.trim() ? "not-allowed" : "pointer",
           whiteSpace: "nowrap",
@@ -946,6 +807,9 @@ export default function CerveauPage() {
 
         {/* Météo — pleine largeur */}
         <MeteoCard />
+
+        {/* Météo marine — pleine largeur */}
+        <MeteoMarineCard />
 
         {/* Briefing IA — pleine largeur */}
         <BriefingCard />

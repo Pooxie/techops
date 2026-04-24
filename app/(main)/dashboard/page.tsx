@@ -8,6 +8,8 @@ import {
   Wrench, Shield, FileDown, Loader2, type LucideIcon,
 } from "lucide-react";
 import Header from "@/components/layout/Header";
+import MeteoCard from "@/components/meteo/MeteoCard";
+import MeteoMarineCard from "@/components/meteo/MeteoMarineCard";
 import {
   fetchDashboardKPIs,
   fetchAlertesPrioritaires,
@@ -32,14 +34,14 @@ import {
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
 const C = {
-  bg: "#F5F5F7",
+  bg: "#FAFAF8",
   card: "#FFFFFF",
   ink: "#111111",
   mid: "#555555",
   soft: "#999999",
   faint: "#E0E0E8",
-  border: "rgba(0,0,0,0.06)",
-  accent: "#2563EB",
+  border: "rgba(26,26,24,0.06)",
+  accent: "#C4A882",
   accentBg: "#EEF4FF",
   ok: "#1B7F3A",
   okBg: "#F0FBF3",
@@ -51,7 +53,7 @@ const C = {
 
 const card: React.CSSProperties = {
   backgroundColor: C.card,
-  borderRadius: 18,
+  borderRadius: 12,
   padding: "20px 22px",
   boxShadow: "0 1px 3px rgba(0,0,0,0.07), 0 4px 14px rgba(0,0,0,0.04)",
   border: `1px solid ${C.border}`,
@@ -103,7 +105,7 @@ function Section({ label }: { label: string }) {
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
 function Skel({ w, h, r = 8 }: { w: number | string; h: number; r?: number }) {
-  return <div style={{ width: w, height: h, borderRadius: r, backgroundColor: "#F0F0F5", flexShrink: 0 }} />;
+  return <div style={{ width: w, height: h, borderRadius: r, backgroundColor: "#EEECEA", flexShrink: 0 }} />;
 }
 
 // ─── Card title ───────────────────────────────────────────────────────────────
@@ -168,7 +170,7 @@ function Donut({ value, total, color, size = 88, sw = 11 }: {
   return (
     <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
       <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#F0F0F5" strokeWidth={sw} />
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#EEECEA" strokeWidth={sw} />
         <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={sw}
           strokeLinecap="round"
           strokeDasharray={`${pct * circ} ${circ}`}
@@ -188,7 +190,7 @@ function Donut({ value, total, color, size = 88, sw = 11 }: {
 
 function ProgressBar({ value, color, height = 5 }: { value: number; color: string; height?: number }) {
   return (
-    <div style={{ height, backgroundColor: "#F0F0F5", borderRadius: 99, overflow: "hidden" }}>
+    <div style={{ height, backgroundColor: "#EEECEA", borderRadius: 99, overflow: "hidden" }}>
       <div style={{ height: "100%", width: `${Math.min(value, 100)}%`, backgroundColor: color, borderRadius: 99, transition: "width .7s ease" }} />
     </div>
   );
@@ -211,7 +213,7 @@ function EvoBars({ data }: { data: NCEvolutionItem[] }) {
           <div key={item.month} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, minWidth: 0 }}>
             <div style={{ width: "100%", height: H, display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 1 }}>
               {item.total === 0
-                ? <div style={{ width: "100%", height: 3, borderRadius: 2, backgroundColor: "#F0F0F5" }} />
+                ? <div style={{ width: "100%", height: 3, borderRadius: 2, backgroundColor: "#EEECEA" }} />
                 : <>
                   {majH > 0 && <div style={{ width: "100%", height: majH, borderRadius: minH === 0 ? "4px 4px 2px 2px" : 0, backgroundColor: C.danger, transition: "height .6s ease" }} />}
                   {minH > 0 && <div style={{ width: "100%", height: minH, borderRadius: majH === 0 ? "4px 4px 2px 2px" : "0 0 2px 2px", backgroundColor: "#FCA5A5", transition: "height .6s ease" }} />}
@@ -272,7 +274,7 @@ function CoutBars({ data, field, color }: { data: CoutEvolutionItem[]; field: "e
             <div style={{ width: "100%", height: H, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
               {h > 0
                 ? <div title={fmtEur(v)} style={{ width: "100%", height: h, borderRadius: "4px 4px 2px 2px", backgroundColor: color, transition: "height .6s ease", opacity: 0.85 }} />
-                : <div style={{ width: "100%", height: 3, borderRadius: 2, backgroundColor: "#F0F0F5" }} />}
+                : <div style={{ width: "100%", height: 3, borderRadius: 2, backgroundColor: "#EEECEA" }} />}
             </div>
             <span style={{ fontSize: 10, color: C.soft, fontWeight: 500 }}>{item.label}</span>
           </div>
@@ -338,6 +340,19 @@ export default function DashboardPage() {
 
       <div style={{ backgroundColor: C.bg, minHeight: "100%", padding: "24px 24px 48px", boxSizing: "border-box" }}>
 
+        {/* ── Météo + Météo marine ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }} className="dashboard-meteo-grid">
+          <MeteoCard />
+          <MeteoMarineCard />
+        </div>
+        <style>{`
+          @media (max-width: 900px) {
+            .dashboard-meteo-grid {
+              grid-template-columns: 1fr !important;
+            }
+          }
+        `}</style>
+
         {/* ── Greeting ── */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4, flexWrap: "wrap", gap: 8 }}>
           <div>
@@ -353,11 +368,11 @@ export default function DashboardPage() {
               style={{
                 display: "flex", alignItems: "center", gap: 6,
                 height: 34, padding: "0 14px", borderRadius: 10,
-                border: "1px solid rgba(0,0,0,0.12)",
+                border: "1px solid rgba(26,26,24,0.10)",
                 backgroundColor: C.card,
                 color: generatingPDF ? C.soft : C.ink,
                 fontSize: 13, fontWeight: 600, cursor: generatingPDF ? "not-allowed" : "pointer",
-                boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+                boxShadow: "0 1px 4px rgba(26,26,24,0.06)",
                 opacity: generatingPDF ? 0.7 : 1,
               }}
             >
@@ -366,7 +381,7 @@ export default function DashboardPage() {
                 : <FileDown size={14} color={C.accent} />}
               <span>{generatingPDF ? "Génération en cours…" : "Rapport mensuel"}</span>
             </button>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, backgroundColor: C.card, borderRadius: 10, padding: "7px 12px", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, backgroundColor: C.card, borderRadius: 10, padding: "7px 12px", boxShadow: "0 1px 4px rgba(26,26,24,0.06)" }}>
               <Clock size={12} color={C.soft} />
               <span style={{ fontSize: 13, fontWeight: 700, color: C.ink, fontVariantNumeric: "tabular-nums" }}>{timeStr}</span>
             </div>
@@ -753,7 +768,7 @@ export default function DashboardPage() {
             style={{
               display: "inline-flex", alignItems: "center", gap: 6,
               padding: "7px 14px", borderRadius: 10,
-              border: "1px solid rgba(0,0,0,0.10)", background: "#1D1D1F",
+              border: "1px solid rgba(26,26,24,0.08)", background: "#1A1A18",
               color: "#FFFFFF", fontSize: 12, fontWeight: 600,
               textDecoration: "none", cursor: "pointer",
             }}
